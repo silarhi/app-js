@@ -1,0 +1,86 @@
+name: 'Publish'
+
+# Publishes @silarhi/app-js to npm when a GitHub Release is published.
+# The release tag (e.g. v0.2.0) drives the published version — the workflow
+# stamps it into package.json, so you never bump the version by hand.
+#
+# Security: uses npm Trusted Publishing (OIDC) — NO long-lived NPM_TOKEN is
+# stored. The job proves its identity to npm with a short-lived id-token, so you
+# must first register this repo + workflow as a Trusted Publisher on npmjs.com
+# (Package settings -> Trusted Publishers). Provenance is attached automatically.
+#
+# A failed release can be re-published with "Run workflow" + the existing tag: a
+# re-run of the release event would reuse the workflow file as it was at that tag.
+
+on:
+    release:
+        types: [published]
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: 'Existing release tag to publish (e.g. v0.3.1)'
+                required: true
+                type: string
+
+permissions:
+    contents: read
+    id-token: write # required for OIDC trusted publishing + provenance
+
+jobs:
+    npm:
+        name: Publish @silarhi/app-js to npm
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        # npm's Trusted Publisher is pinned to this environment, so the OIDC token
+        # MUST carry the `environment: release` claim. The environment's required
+        # reviewers were removed, so this no longer gates — it only supplies the claim.
+        environment: release
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  ref: ${{ github.event.release.tag_name || inputs.tag }}
+
+            - uses: pnpm/action-setup@v6
+              with:
+                  package_json_file: package.json
+
+            - uses: actions/setup-node@v7
+              with:
+                  node-version: '24'
+                  # No `registry-url`: it writes an .npmrc with `${NODE_AUTH_TOKEN}`, which
+                  # setup-node v7 no longer stubs, so pnpm fails to read it. OIDC publishing
+                  # targets the default registry without any .npmrc.
+                  cache: pnpm
+                  cache-dependency-path: pnpm-lock.yaml
+
+            # The release tag is the single source of truth for the version —
+            # no manual package.json bump. Both `vX.Y.Z` and `X.Y.Z` tags work.
+            - name: Set version from release tag
+              run: npm version "${TAG#v}" --no-git-tag-version --allow-same-version
+              env:
+                  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Verify (lint, typecheck, test)
+              run: |
+                  pnpm lint
+                  pnpm typecheck
+                  pnpm test
+
+            - name: Build
+              run: pnpm build
+
+            # No NODE_AUTH_TOKEN: pnpm exchanges the OIDC id-token with the registry.
+            # --no-git-checks: the release tag is checked out detached, not on `main`.
+            # npm versions are immutable, so skip (don't red-fail) if this version
+            # is already published — makes re-running a release a safe no-op.
+            - name: Publish
+              run: |
+                  version="$(node -p 'require("./package.json").version')"
+                  if npm view "@silarhi/app-js@${version}" version > /dev/null 2>&1; then
+                      echo "@silarhi/app-js@${version} is already published — skipping."
+                      exit 0
+                  fi
+                  pnpm publish --provenance --access public --no-git-checks
