@@ -30,12 +30,17 @@
         ".": {
             "types": "./dist/index.d.mts",
             "import": "./dist/index.mjs"
+        },
+        "./form": {
+            "types": "./dist/form.d.mts",
+            "import": "./dist/form.mjs"
         }
     },
     "scripts": {
         "build": "tsdown",
         "test": "vitest run",
         "test:watch": "vitest",
+        "test:coverage": "vitest run --coverage",
         "typecheck": "tsc --noEmit",
         "lint": "biome check src test",
         "lint:fix": "biome check --write src test",
@@ -43,6 +48,7 @@
     },
     "devDependencies": {
         "@biomejs/biome": "2.5.15",
+        "@vitest/coverage-v8": "^5.0.5",
         "husky": "^9.1.7",
         "jsdom": "^30.0.0",
         "lint-staged": "^17.6.0",

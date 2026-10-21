@@ -8,7 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { App, defineListener, type Listener, type Page } from '../src'
+import { App, defineListener, defineModule, definePage, type Listener, type Page } from '../src'
 
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
 
@@ -69,6 +69,18 @@ describe('modules', () => {
         }).start()
 
         expect(after).toHaveBeenCalledOnce()
+    })
+
+    it('logs an async module that rejects', async () => {
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+        const module = defineModule(async () => {
+            throw new Error('boom')
+        })
+
+        new App({ modules: [module] }).start()
+        await flush()
+
+        expect(error).toHaveBeenCalledWith('Module failed to start', module, expect.any(Error))
     })
 })
 
@@ -180,6 +192,116 @@ describe('listeners', () => {
         expect(after.connected).toHaveLength(1)
         expect(console.error).toHaveBeenCalledOnce()
     })
+
+    it('reconnects after unmount an element whose listener returned no cleanup', () => {
+        document.body.innerHTML = '<p></p>'
+        const connect = vi.fn()
+        const app = new App({ listeners: [{ selector: 'p', connect }] })
+
+        app.mount()
+        app.unmount()
+        app.mount()
+
+        expect(connect).toHaveBeenCalledTimes(2)
+    })
+
+    it('keeps unmounting when a cleanup throws', () => {
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+        document.body.innerHTML = '<p></p><p></p>'
+        const after = spyListener('p')
+        const app = new App({
+            listeners: [
+                {
+                    selector: 'p',
+                    connect: () => () => {
+                        throw new Error('boom')
+                    },
+                },
+                after,
+            ],
+        })
+
+        app.mount()
+        app.unmount()
+
+        expect(after.disconnected).toHaveLength(2)
+        expect(error).toHaveBeenCalledTimes(2)
+        expect(error).toHaveBeenCalledWith('Failed to disconnect "p" listener', expect.any(Element), expect.any(Error))
+    })
+
+    it('stores the cleanup of an async connect and runs it on unmount', async () => {
+        document.body.innerHTML = '<p></p>'
+        const cleanup = vi.fn()
+        const app = new App({ listeners: [{ selector: 'p', connect: async () => cleanup }] })
+
+        app.mount()
+        await flush()
+        app.unmount()
+
+        expect(cleanup).toHaveBeenCalledOnce()
+    })
+
+    it('runs an async cleanup that resolves after unmount right away', async () => {
+        document.body.innerHTML = '<p></p>'
+        const cleanup = vi.fn()
+        let resolveConnect: (value: () => void) => void = () => {}
+        const app = new App({
+            listeners: [{ selector: 'p', connect: () => new Promise((resolve) => (resolveConnect = resolve)) }],
+        })
+
+        app.mount()
+        app.unmount()
+        expect(cleanup).not.toHaveBeenCalled()
+
+        resolveConnect(cleanup)
+        await flush()
+        expect(cleanup).toHaveBeenCalledOnce()
+    })
+
+    it('keeps a late cleanup to its own connection after a disconnect → reconnect', async () => {
+        document.body.innerHTML = '<p></p>'
+        const first = vi.fn()
+        const second = vi.fn()
+        const resolvers: Array<(value: () => void) => void> = []
+        const app = new App({
+            listeners: [{ selector: 'p', connect: () => new Promise((resolve) => resolvers.push(resolve)) }],
+        })
+
+        app.mount()
+        app.unmount()
+        app.mount()
+        resolvers[1]?.(second)
+        resolvers[0]?.(first)
+        await flush()
+
+        expect(first).toHaveBeenCalledOnce()
+        expect(second).not.toHaveBeenCalled()
+
+        app.unmount()
+        expect(second).toHaveBeenCalledOnce()
+    })
+
+    it('logs an async connect that rejects, and late cleanups that throw', async () => {
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+        document.body.innerHTML = '<p></p><i></i>'
+        let resolveConnect: (value: () => void) => void = () => {}
+        const app = new App({
+            listeners: [
+                { selector: 'p', connect: () => Promise.reject(new Error('boom')) },
+                { selector: 'i', connect: () => new Promise((resolve) => (resolveConnect = resolve)) },
+            ],
+        })
+
+        app.mount()
+        app.unmount()
+        resolveConnect(() => {
+            throw new Error('late boom')
+        })
+        await flush()
+
+        expect(error).toHaveBeenCalledWith('Failed to connect "p" listener', expect.any(Element), expect.any(Error))
+        expect(error).toHaveBeenCalledWith('Failed to disconnect "i" listener', expect.any(Element), expect.any(Error))
+    })
 })
 
 describe('pages', () => {
@@ -270,5 +392,202 @@ describe('pages', () => {
         resolveChunk({ default: () => lazyCleanup })
         await flush()
         expect(lazyCleanup).toHaveBeenCalledOnce()
+    })
+
+    it('warns and keeps the first initializer registered under an id', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        const first = vi.fn<Page>()
+        const app = new App().registerPage('foo', first).registerPage('foo', vi.fn())
+
+        await app.loadPage('foo')
+
+        expect(warn).toHaveBeenCalledWith('Page initializer "foo" is already registered.')
+        expect(first).toHaveBeenCalledOnce()
+    })
+
+    it('rejects a chunk without a default-exported initializer', async () => {
+        const app = new App({ pages: { broken: () => Promise.resolve({ default: 'nope' as unknown as Page }) } })
+
+        await expect(app.loadPage('broken')).rejects.toThrow('Page chunk "broken" has no default-exported initializer.')
+    })
+
+    it('logs a page that fails to load', async () => {
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+        document.body.innerHTML = '<div data-page="broken"></div>'
+        const app = new App({ pages: { broken: () => Promise.reject(new Error('chunk failed')) } })
+
+        app.mount()
+        await flush()
+
+        expect(error).toHaveBeenCalledWith(
+            'Failed to load page "broken"',
+            document.body.firstElementChild,
+            expect.any(Error)
+        )
+    })
+
+    it('ignores an empty data-page', () => {
+        document.body.innerHTML = '<div data-page=" "></div>'
+        const loadPage = vi.spyOn(App.prototype, 'loadPage')
+
+        new App().mount()
+
+        expect(loadPage).not.toHaveBeenCalled()
+    })
+
+    it('refuses a data-page that is not an array of ids', () => {
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+        document.body.innerHTML = '<div data-page=\'[1, "foo"]\'></div>'
+
+        new App().mount()
+
+        expect(error).toHaveBeenCalledWith(
+            'Failed to connect "[data-page]" listener',
+            document.body.firstElementChild,
+            new TypeError('data-page must be a JSON array of strings, got [1, "foo"]')
+        )
+    })
+
+    it('ignores a page returning no cleanup', async () => {
+        document.body.innerHTML = '<div data-page="noop"></div>'
+        const page = definePage(() => {})
+        const app = new App().registerPage('noop', page)
+
+        app.mount()
+        await flush()
+
+        expect(() => app.unmount()).not.toThrow()
+    })
+})
+
+describe('async ordering', () => {
+    it('reports no pending connect synchronously, then waits for every one within the root', async () => {
+        document.body.innerHTML = '<p></p><i></i>'
+        let resolveP: (value: undefined) => void = () => {}
+        const app = new App({
+            listeners: [
+                { selector: 'p', connect: () => new Promise((resolve) => (resolveP = resolve)) },
+                { selector: 'i', connect: () => Promise.reject(new Error('boom')) },
+            ],
+            onError: () => {},
+        })
+
+        expect(app.whenConnected()).toBeUndefined()
+
+        app.mount()
+        const settled = vi.fn()
+        app.whenConnected()?.then(settled)
+        await flush()
+        expect(settled).not.toHaveBeenCalled()
+
+        resolveP(undefined)
+        await flush()
+        expect(settled).toHaveBeenCalledOnce()
+        expect(app.whenConnected()).toBeUndefined()
+    })
+
+    it('runs a page after the async connects within its element only', async () => {
+        document.body.innerHTML = '<aside></aside><main data-page="foo"><input></main>'
+        const calls: string[] = []
+        const resolvers: Array<() => void> = []
+        const deferred = (name: string) => () =>
+            new Promise<undefined>((resolve) =>
+                resolvers.push(() => {
+                    calls.push(name)
+                    resolve(undefined)
+                })
+            )
+        const app = new App({
+            listeners: [
+                { selector: 'aside', connect: deferred('aside') },
+                { selector: 'input', connect: deferred('input') },
+            ],
+        }).registerPage('foo', () => void calls.push('page'))
+
+        app.mount()
+        expect(calls).toEqual([])
+
+        resolvers[1]?.()
+        await flush()
+        expect(calls).toEqual(['input', 'page'])
+
+        resolvers[0]?.()
+        await flush()
+        expect(calls).toEqual(['input', 'page', 'aside'])
+    })
+
+    it('skips a page whose element was unmounted while its listeners connected', async () => {
+        document.body.innerHTML = '<main data-page="foo"><input></main>'
+        let resolveInput: (value: undefined) => void = () => {}
+        const page = vi.fn<Page>()
+        const app = new App({
+            listeners: [{ selector: 'input', connect: () => new Promise((resolve) => (resolveInput = resolve)) }],
+        }).registerPage('foo', page)
+
+        app.mount()
+        app.unmount()
+        resolveInput(undefined)
+        await flush()
+
+        expect(page).not.toHaveBeenCalled()
+    })
+})
+
+describe('onError', () => {
+    it('receives every caught error with its context instead of the console', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+        document.body.innerHTML = '<p></p><i></i><b data-page="missing-chunk"></b>'
+        const onError = vi.fn()
+        const module = () => {
+            throw new Error('module')
+        }
+        const syncListener = {
+            selector: 'p',
+            connect: () => () => {
+                throw new Error('disconnect')
+            },
+        }
+        const asyncListener = { selector: 'i', connect: () => Promise.reject(new Error('async connect')) }
+        const app = new App({
+            modules: [module],
+            listeners: [syncListener, asyncListener],
+            pages: { 'missing-chunk': () => Promise.reject(new Error('chunk')) },
+            onError,
+        })
+
+        app.start()
+        app.mount()
+        await flush()
+        app.unmount()
+
+        const p = document.querySelector('p')
+        const i = document.querySelector('i')
+        const b = document.querySelector('b')
+        expect(onError.mock.calls).toEqual([
+            [new Error('module'), { type: 'module', module }],
+            [new Error('async connect'), { type: 'connect', listener: asyncListener, element: i }],
+            [new Error('chunk'), { type: 'page', pageId: 'missing-chunk', element: b }],
+            [new Error('disconnect'), { type: 'disconnect', listener: syncListener, element: p }],
+        ])
+        expect(consoleError).not.toHaveBeenCalled()
+    })
+
+    it('falls back to the console when the handler throws', () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+        const handlerError = new Error('handler')
+        const app = new App({
+            modules: [
+                () => {
+                    throw new Error('module')
+                },
+            ],
+            onError: () => {
+                throw handlerError
+            },
+        })
+
+        app.start()
+
+        expect(consoleError).toHaveBeenCalledWith('The onError handler failed', handlerError, new Error('module'))
     })
 })

@@ -7,9 +7,17 @@
  * with this source code in the file LICENSE.
  */
 
+import {
+    Container,
+    type ParameterMap,
+    type Parameters,
+    type ServiceClass,
+    type ServiceFactories,
+    type ServiceMap,
+} from './Container'
 import { findAllSelf } from './dom'
 import { pagesListener } from './pagesListener'
-import type { Cleanup, Listener, MaybeCleanup, Module, Page, PageLoaders } from './types'
+import type { Cleanup, ErrorContext, ErrorHandler, Listener, MaybeCleanup, Module, Page, PageLoaders } from './types'
 
 export interface AppOptions {
     /** Boot-once hooks, run in order by `start()`. */
@@ -18,6 +26,12 @@ export interface AppOptions {
     listeners?: Listener[]
     /** Page id → lazy chunk, resolved by `loadPage()` / `data-page`. */
     pages?: PageLoaders
+    /** Service id → factory, built on the first `get()`. */
+    services?: ServiceFactories
+    /** Plain values (locale, routes, Sentry DSN…), read with `getParameter()`. */
+    parameters?: Parameters
+    /** Receives every error the app catches (Sentry, a logger…). Defaults to `console.error`. */
+    onError?: ErrorHandler
 }
 
 /**
@@ -40,10 +54,25 @@ export class App {
     readonly #pageResolvers = new Map<string, Array<() => void>>()
     readonly #tracked = new Map<Listener, Set<Element>>([[pagesListener as Listener, new Set()]])
     readonly #cleanups = new WeakMap<Element, Map<Listener, Cleanup>>()
+    readonly #connecting = new Map<Promise<unknown>, Element>()
+    readonly #onError: ErrorHandler
     #started = false
     #mounted = false
 
-    constructor({ modules = [], listeners = [], pages = {} }: AppOptions = {}) {
+    /** The app's service container; `get()` / `getParameter()` are shortcuts to it. */
+    readonly container: Container
+
+    constructor({
+        modules = [],
+        listeners = [],
+        pages = {},
+        services = {},
+        parameters = {},
+        onError = logError,
+    }: AppOptions = {}) {
+        this.#onError = onError
+        this.container = new Container({ services, parameters })
+        this.container.set('app', () => this)
         for (const module of modules) {
             this.addModule(module)
         }
@@ -51,6 +80,19 @@ export class App {
             this.addListener(listener)
         }
         this.addPages(pages)
+    }
+
+    get<K extends keyof ServiceMap & string>(id: K): ServiceMap[K]
+    get<T>(id: ServiceClass<T>): T
+    get<T = unknown>(id: string): T
+    get(id: string | ServiceClass): unknown {
+        return this.container.get(id as string)
+    }
+
+    getParameter<K extends keyof ParameterMap & string>(name: K): ParameterMap[K]
+    getParameter<T = unknown>(name: string): T
+    getParameter(name: string): unknown {
+        return this.container.getParameter(name)
     }
 
     /**
@@ -120,7 +162,8 @@ export class App {
     /**
      * Connect every listener to its matching elements within `container`
      * (the container itself included). The built-in `data-page` listener
-     * always runs last, so page code can rely on every other listener.
+     * always runs last, and its pages wait for the async connects within their
+     * element, so page code can rely on every other listener.
      */
     mount(container: ParentNode = document): void {
         this.#mounted = true
@@ -157,9 +200,40 @@ export class App {
                 try {
                     cleanup()
                 } catch (error) {
-                    console.error(`Failed to disconnect "${listener.selector}" listener`, element, error)
+                    this.reportError(error, { type: 'disconnect', listener, element })
                 }
             }
+        }
+    }
+
+    /**
+     * Settles once every async `connect` already started within `root` (the
+     * root itself included) has settled, fulfilled or not. `undefined` when
+     * none is pending, so a caller can stay synchronous:
+     *
+     *     app.mount(frame)
+     *     await app.whenConnected(frame)
+     */
+    whenConnected(root: ParentNode = document): Promise<void> | undefined {
+        const pending: Promise<unknown>[] = []
+        for (const [promise, element] of this.#connecting) {
+            if (element === root || root.contains(element)) {
+                pending.push(promise)
+            }
+        }
+
+        return pending.length > 0 ? Promise.allSettled(pending).then(() => undefined) : undefined
+    }
+
+    /**
+     * Hand an error to the `onError` handler. Listeners and pages may use it
+     * too, so their failures reach the same place.
+     */
+    reportError(error: unknown, context: ErrorContext): void {
+        try {
+            this.#onError(error, context)
+        } catch (handlerError) {
+            console.error('The onError handler failed', handlerError, error)
         }
     }
 
@@ -246,7 +320,8 @@ export class App {
 
             tracked.add(element)
             try {
-                const cleanup = listener.connect(element, { app: this })
+                const result = listener.connect(element, { app: this })
+                const cleanup = result instanceof Promise ? this.#deferCleanup(listener, element, result) : result
                 if (typeof cleanup === 'function') {
                     let cleanups = this.#cleanups.get(element)
                     if (!cleanups) {
@@ -256,8 +331,47 @@ export class App {
                     cleanups.set(listener, cleanup)
                 }
             } catch (error) {
-                console.error(`Failed to connect "${listener.selector}" listener`, element, error)
+                this.reportError(error, { type: 'connect', listener, element })
             }
+        }
+    }
+
+    /**
+     * Stand-in cleanup for an async `connect`, registered right away so
+     * `unmount()` needs no special case. Each connection owns its flag: a
+     * cleanup resolving after a disconnect → reconnect only tears down its own
+     * connection. Pending until it settles, for `whenConnected()`.
+     */
+    #deferCleanup(listener: Listener, element: Element, pending: Promise<MaybeCleanup>): Cleanup {
+        let cleanup: MaybeCleanup
+        let disconnected = false
+
+        this.#connecting.set(pending, element)
+        pending.then(
+            (resolved) => {
+                this.#connecting.delete(pending)
+                if (typeof resolved !== 'function') {
+                    return
+                }
+                if (!disconnected) {
+                    cleanup = resolved
+                    return
+                }
+                try {
+                    resolved()
+                } catch (error) {
+                    this.reportError(error, { type: 'disconnect', listener, element })
+                }
+            },
+            (error: unknown) => {
+                this.#connecting.delete(pending)
+                this.reportError(error, { type: 'connect', listener, element })
+            }
+        )
+
+        return () => {
+            disconnected = true
+            cleanup?.()
         }
     }
 
@@ -265,10 +379,28 @@ export class App {
         try {
             const result = module({ app: this })
             if (result instanceof Promise) {
-                result.catch((error: unknown) => console.error('Module failed to start', module, error))
+                result.catch((error: unknown) => this.reportError(error, { type: 'module', module }))
             }
         } catch (error) {
-            console.error('Module failed to start', module, error)
+            this.reportError(error, { type: 'module', module })
         }
+    }
+}
+
+/**
+ * Default `onError`: the console, with the culprit next to the error.
+ */
+function logError(error: unknown, context: ErrorContext): void {
+    switch (context.type) {
+        case 'module':
+            console.error('Module failed to start', context.module, error)
+            break
+        case 'connect':
+        case 'disconnect':
+            console.error(`Failed to ${context.type} "${context.listener.selector}" listener`, context.element, error)
+            break
+        case 'page':
+            console.error(`Failed to load page "${context.pageId}"`, context.element, error)
+            break
     }
 }
