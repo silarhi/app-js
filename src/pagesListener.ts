@@ -34,7 +34,9 @@ function parsePageIds(value: string | undefined): string[] {
 /**
  * Built-in listener behind `<div data-page='["foo"]' data-page-params='{…}'>`:
  * every id shares the same params. `App` always connects it after the
- * consumer's listeners, so page code can rely on them being connected.
+ * consumer's listeners, and it waits for their async connects within its
+ * element, so page code can rely on them being connected. With none pending,
+ * a registered initializer still runs within the mount pass.
  *
  * Pages load lazily — a cleanup may arrive after the element was disconnected:
  * it then runs immediately.
@@ -47,22 +49,33 @@ export const pagesListener: Listener<HTMLElement> = {
         const cleanups: Cleanup[] = []
         let disconnected = false
 
-        for (const id of ids) {
-            app.loadPage(id, params, element).then(
-                (cleanup) => {
-                    if (typeof cleanup !== 'function') {
-                        return
-                    }
-                    if (disconnected) {
-                        cleanup()
-                    } else {
-                        cleanups.push(cleanup)
-                    }
-                },
-                (error: unknown) => {
-                    console.error(`Failed to load page "${id}"`, element, error)
-                }
-            )
+        const load = (): void => {
+            if (disconnected) {
+                return
+            }
+
+            for (const id of ids) {
+                app.loadPage(id, params, element).then(
+                    (cleanup) => {
+                        if (typeof cleanup !== 'function') {
+                            return
+                        }
+                        if (disconnected) {
+                            cleanup()
+                        } else {
+                            cleanups.push(cleanup)
+                        }
+                    },
+                    (error: unknown) => app.reportError(error, { type: 'page', pageId: id, element })
+                )
+            }
+        }
+
+        const connecting = app.whenConnected(element)
+        if (connecting) {
+            void connecting.then(load)
+        } else {
+            load()
         }
 
         return () => {

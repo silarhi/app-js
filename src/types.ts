@@ -27,17 +27,34 @@ export interface ConnectContext {
 }
 
 /**
- * Per-element behaviour. `App.mount(container)` runs `connect` once per element
- * matching `selector` inside `container` (the container itself included).
+ * The `connect` half of a listener, without its selector: what a lazy chunk
+ * default-exports for `lazyListener()`, whose call holds the selector.
+ *
+ * `connect` may be async: its cleanup can then resolve after the element was
+ * disconnected, and runs immediately in that case.
  *
  * `connect` is declared with method syntax on purpose: it keeps
  * `Listener<HTMLInputElement>` assignable to `Listener`, so typed listeners can
  * be registered next to untyped ones.
  */
-export interface Listener<E extends Element = Element> {
-    selector: string
-    connect(element: E, context: ConnectContext): MaybeCleanup
+export interface LazyListener<E extends Element = Element> {
+    connect(element: E, context: ConnectContext): MaybeCleanup | Promise<MaybeCleanup>
 }
+
+/**
+ * Per-element behaviour. `App.mount(container)` runs `connect` once per element
+ * matching `selector` inside `container` (the container itself included).
+ */
+export interface Listener<E extends Element = Element> extends LazyListener<E> {
+    selector: string
+}
+
+/**
+ * Lazy listener chunk, typically `() => import('./listeners/datepicker')`. The
+ * module's default export is a `LazyListener` (a full `Listener` fits too; its
+ * selector is ignored).
+ */
+export type ListenerLoader<E extends Element = Element> = () => Promise<{ default: LazyListener<E> }>
 
 export interface ModuleContext {
     app: App
@@ -75,3 +92,13 @@ export type Page<P extends object = Record<string, unknown>> = (
 export type PageLoader = () => Promise<{ default: Page<any> }>
 
 export type PageLoaders = Record<string, PageLoader>
+
+/**
+ * Where an error caught by `App` comes from, for `AppOptions.onError`.
+ */
+export type ErrorContext =
+    | { type: 'module'; module: Module }
+    | { type: 'connect' | 'disconnect'; listener: Listener; element: Element }
+    | { type: 'page'; pageId: string; element: Element }
+
+export type ErrorHandler = (error: unknown, context: ErrorContext) => void

@@ -50,3 +50,71 @@ export function on(
 
     return () => target.removeEventListener(type, handler, options)
 }
+
+/**
+ * Resolves once the document is parsed, right away if it already is.
+ */
+export function domReady(): Promise<void> {
+    return new Promise((resolve) => {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => resolve(), { once: true })
+        } else {
+            resolve()
+        }
+    })
+}
+
+/**
+ * The element with `id` within `scope`: `getElementById` on a document, an
+ * attribute match anywhere else (fragments, scoped forms).
+ */
+export function byId<E extends Element = HTMLElement>(id: string, scope: ParentNode = document): E | null {
+    return scope instanceof Document ? (scope.getElementById(id) as E | null) : scope.querySelector<E>(`[id="${id}"]`)
+}
+
+export function findOne<E extends Element = HTMLElement>(selector: string, root: ParentNode = document): E | null {
+    return root.querySelector<E>(selector)
+}
+
+/**
+ * `querySelectorAll` as an array, so results can be mapped and filtered.
+ */
+export function findAll<E extends Element = HTMLElement>(selector: string, root: ParentNode = document): E[] {
+    return [...root.querySelectorAll<E>(selector)]
+}
+
+/**
+ * Dispatch a bubbling, cancelable `CustomEvent` and return it, so callers can
+ * check `defaultPrevented`.
+ */
+export function trigger<T = unknown>(target: EventTarget, type: string, detail?: T): CustomEvent<T> {
+    const event = new CustomEvent<T>(type, { bubbles: true, cancelable: true, detail })
+    target.dispatchEvent(event)
+
+    return event
+}
+
+/**
+ * Escape a value for an HTML string, as text content or a quoted attribute.
+ */
+export function escapeHtml(value: unknown): string {
+    return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;')
+}
+
+/**
+ * Parse `html` and append its nodes to `parent`. Returns the appended
+ * elements, so the caller can `app.mount()` them.
+ */
+export function appendHTML(parent: Element, html: string): Element[] {
+    const template = document.createElement('template')
+    template.innerHTML = html
+    const elements = [...template.content.children]
+    parent.append(template.content)
+
+    return elements
+}
