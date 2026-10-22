@@ -38,6 +38,27 @@ The core ships no listener or module of its own, only the built-in `data-page` o
 More can be registered at any time with `app.addModule()`, `app.addListener()`, `app.addPages()` or
 `app.registerPage()`, so a shared package can export its own listeners for apps to spread in.
 
+### Modules
+
+```js
+// modules/confirm.js
+import { defineModule, on } from '@silarhi/app-js'
+
+export default defineModule(() => {
+    on(document, 'click', (event) => {
+        const trigger = event.target.closest('[data-confirm]')
+        if (trigger && !window.confirm(trigger.dataset.confirm)) {
+            event.preventDefault()
+        }
+    })
+})
+```
+
+A module runs once, on `app.start()`, in registration order; one added later with `app.addModule()` runs right away.
+It binds to `document`, `window` or library globals only, never to elements a partial render may replace: those belong
+in a listener. Its return value is ignored, as a module lives as long as the page. It may be async: `start()` does not
+wait for it, and a rejection is reported like a synchronous throw.
+
 ### Listeners
 
 ```js
@@ -95,12 +116,14 @@ The chunk is imported once (concurrent connects share it, a failed import is ret
 
 ```js
 // pages/user-form.js
-export default function userForm({ app, container, userId }) {
+import { definePage } from '@silarhi/app-js'
+
+export default definePage(({ app, container, userId }) => {
     // …
     return () => {
         /* cleanup */
     }
-}
+})
 ```
 
 The `data-page` listener always connects after the consumer's listeners and waits for their async connects within its
