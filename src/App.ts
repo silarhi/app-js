@@ -239,7 +239,10 @@ export class App {
 
     /**
      * Register a page initializer directly (no lazy chunk). Replays the
-     * `loadPage()` calls that were waiting for it.
+     * `loadPage()` calls that were waiting for it once the registering script
+     * has run (a microtask): a page entry calls `registerPage()` while its own
+     * module is still evaluating, and its initializer may read bindings the
+     * module declares further down.
      */
     // biome-ignore lint/suspicious/noExplicitAny: params are page-specific, the registry cannot know them
     registerPage(pageId: string, page: Page<any>): this {
@@ -252,8 +255,12 @@ export class App {
 
         const resolvers = this.#pageResolvers.get(pageId)
         this.#pageResolvers.delete(pageId)
-        for (const resolve of resolvers ?? []) {
-            resolve()
+        if (resolvers) {
+            queueMicrotask(() => {
+                for (const resolve of resolvers) {
+                    resolve()
+                }
+            })
         }
 
         return this
@@ -265,7 +272,8 @@ export class App {
      * Resolution: a registered initializer runs synchronously (within the
      * caller's mount pass); a known lazy id imports its chunk once — concurrent
      * calls share the import, a failed import is retried on the next call —
-     * then runs; an unknown id waits for `registerPage()`.
+     * then runs; an unknown id waits for `registerPage()`, and runs once the
+     * script that registered it has finished.
      */
     async loadPage(
         pageId: string,

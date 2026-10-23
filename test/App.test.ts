@@ -354,6 +354,22 @@ describe('pages', () => {
         expect(page).toHaveBeenCalledWith(expect.objectContaining({ x: 1 }))
     })
 
+    it('runs a waiting page once the script that registered it has run', async () => {
+        const app = new App()
+        const loading = app.loadPage('late')
+        await flush()
+
+        // A page entry registers itself while its module evaluates: the initializer reads a binding declared after
+        // the registerPage() call, which a synchronous replay would hit in its temporal dead zone
+        const seen: boolean[] = []
+        let evaluated = false
+        app.registerPage('late', () => void seen.push(evaluated))
+        evaluated = true
+        await loading
+
+        expect(seen).toEqual([true])
+    })
+
     it('connects data-page markers after every other listener', () => {
         document.body.innerHTML = '<div data-page=\'["foo"]\' data-page-params=\'{"id": 42}\' class="widget"></div>'
         const order: string[] = []
