@@ -128,9 +128,12 @@ export default definePage(({ app, container, userId }) => {
 
 The `data-page` listener always connects after the consumer's listeners and waits for their async connects within its
 element (lazy listeners included), so page code can rely on them. Listeners outside the element are not waited for. A
-chunk is
-imported once (concurrent loads share it, a failed import is retried); `app` and `container` always win over params
-of the same name.
+chunk is imported once (concurrent loads share it, a failed import is retried); `app` and `container` always win over
+params of the same name.
+
+A page registered by its own entry script (`app.registerPage('dashboard', page)`, without a `pages` loader) may load
+after the app has mounted: its markers wait, then run once that script has finished evaluating, so the page can read
+bindings its module declares after the `registerPage()` call.
 
 ### Services and parameters
 
