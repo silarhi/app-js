@@ -8,19 +8,32 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { App, escapeHtml } from '../../src'
+import { App, escapeHtml, type Listener } from '../../src'
 import {
     COLLECTION_EVENTS,
     type CollectionItemDetail,
     CollectionManager,
+    type CollectionOptions,
+    collectionListener,
+    DEFAULT_BUTTON_SELECTORS,
     DEFAULT_SELECTORS,
     formView,
 } from '../../src/form'
+
+declare module '../../src/Container' {
+    interface ServiceMap {
+        collections: CollectionManager
+    }
+}
 
 const $ = <E extends Element = HTMLElement>(selector: string): E => document.querySelector(selector) as unknown as E
 
 const input = <E extends Element = HTMLInputElement>(item: Element, selector = 'input'): E =>
     item.querySelector(selector) as unknown as E
+
+/** A manager on an app of its own, which mounts nothing */
+const manager = (options: Partial<CollectionOptions> = {}): CollectionManager =>
+    new CollectionManager({ app: new App(), ...options })
 
 const ITEM = (name: string): string =>
     `<div class="collection-item"><input id="tasks_${name}_label" name="tasks[${name}][label]" class="form-control"><button class="remove-collection" data-confirm-message="Sure?"></button></div>`
@@ -59,15 +72,24 @@ describe('add', () => {
         expect($('#tasks').dataset.index).toBe('2')
     })
 
-    it('works without an app, mounting nothing', () => {
-        const item = new CollectionManager().add($('#tasks'))
+    it('adds to the collection in the wrapper of a button', () => {
+        const item = manager().addFrom($('.add-collection'), { label: 'Next' })
 
-        expect(input(item).id).toBe('tasks_1_label')
+        expect(item.parentElement).toBe($('#tasks'))
+        expect(input(item).value).toBe('Next')
+    })
+
+    it('throws for a button outside any wrapper', () => {
+        document.body.insertAdjacentHTML('beforeend', '<button id="lost"></button>')
+
+        expect(() => manager().addFrom($('#lost'))).toThrow(
+            'No ".form-collection" found in the ".collection-wrapper" of the button.'
+        )
     })
 
     it('throws without a prototype or for an unknown id', () => {
         delete $('#tasks').dataset.prototype
-        const collections = new CollectionManager()
+        const collections = manager()
 
         expect(() => collections.add('tasks')).toThrow('The collection has no "data-prototype" attribute.')
         expect(() => collections.add('missing')).toThrow('Unable to find an element with id "missing".')
@@ -77,13 +99,13 @@ describe('add', () => {
         $('#tasks').dataset.prototype = ITEM('__task__')
         $('#tasks').dataset.prototypeName = '__task__'
 
-        expect(input(new CollectionManager().add('tasks')).id).toBe('tasks_1_label')
+        expect(input(manager().add('tasks')).id).toBe('tasks_1_label')
     })
 })
 
 describe('next index', () => {
     it('never reuses an index after a removal', async () => {
-        const collections = new CollectionManager()
+        const collections = manager()
 
         collections.add('tasks')
         await collections.remove(collections.items('tasks')[1], { confirm: false })
@@ -95,26 +117,26 @@ describe('next index', () => {
         $('#tasks').insertAdjacentHTML('beforeend', ITEM('4'))
         $('#tasks').insertAdjacentHTML('beforeend', '<input id="tasks_note" name="tasks[note]">')
 
-        expect(input(new CollectionManager().add('tasks')).id).toBe('tasks_5_label')
+        expect(input(manager().add('tasks')).id).toBe('tasks_5_label')
     })
 
     it('starts at 0 for an empty collection', () => {
         $('#tasks').replaceChildren()
 
-        expect(input(new CollectionManager().add('tasks')).id).toBe('tasks_0_label')
+        expect(input(manager().add('tasks')).id).toBe('tasks_0_label')
     })
 
     it('prefers a data-index rendered by the template', () => {
         $('#tasks').dataset.index = '9'
 
-        expect(input(new CollectionManager().add('tasks')).id).toBe('tasks_9_label')
+        expect(input(manager().add('tasks')).id).toBe('tasks_9_label')
     })
 
     it('counts children for a collection without an id', () => {
         const collection = $('#tasks')
         collection.removeAttribute('id')
 
-        expect(input(new CollectionManager().add(collection)).id).toBe('tasks_1_label')
+        expect(input(manager().add(collection)).id).toBe('tasks_1_label')
     })
 })
 
@@ -133,7 +155,7 @@ describe('add with values', () => {
     })
 
     it('fills fields, entity ids, multiple selects, embedded forms and nested collections', () => {
-        const item = new CollectionManager().add('tasks', {
+        const item = manager().add('tasks', {
             label: 'Ship',
             owner: { id: 5, name: 'Ada' },
             tags: ['a', 'b'],
@@ -160,7 +182,7 @@ describe('add with values', () => {
         const added = vi.fn()
         document.addEventListener(COLLECTION_EVENTS.add, added)
 
-        new CollectionManager().add('tasks', { steps: [{ name: 'build' }] })
+        manager().add('tasks', { steps: [{ name: 'build' }] })
         document.removeEventListener(COLLECTION_EVENTS.add, added)
 
         expect(added).toHaveBeenCalledOnce()
@@ -170,21 +192,21 @@ describe('add with values', () => {
         const changed = vi.fn((event: Event) => (event.target as HTMLElement).id)
         document.addEventListener('change', changed)
 
-        new CollectionManager().add('tasks', { label: 'Ship', owner: { id: 5 } })
-        new CollectionManager().add('tasks')
+        manager().add('tasks', { label: 'Ship', owner: { id: 5 } })
+        manager().add('tasks')
         document.removeEventListener('change', changed)
 
         expect(changed.mock.results.map((result) => result.value)).toEqual(['tasks_1_label', 'tasks_1_owner'])
     })
 
     it('empties a field given null', () => {
-        const item = new CollectionManager().add('tasks', { label: null })
+        const item = manager().add('tasks', { label: null })
 
         expect(input(item).value).toBe('')
     })
 
     it('leaves fields without a value untouched', () => {
-        const item = new CollectionManager().add('tasks', { label: undefined, unknown: 'x', address: {} })
+        const item = manager().add('tasks', { label: undefined, unknown: 'x', address: {} })
 
         expect(input(item).value).toBe('')
         expect(input(item, '#tasks_1_address_city').value).toBe('')
@@ -212,7 +234,7 @@ describe('remove', () => {
 
     it('lets a collection.remove handler veto the removal before any dialog', async () => {
         const confirm = vi.fn(() => true)
-        const collections = new CollectionManager({ confirm })
+        const collections = manager({ confirm })
         $('#tasks').addEventListener(COLLECTION_EVENTS.remove, (event) => event.preventDefault())
 
         expect(await collections.remove(collections.add('tasks'))).toBe(false)
@@ -222,7 +244,7 @@ describe('remove', () => {
 
     it('asks through window.confirm by default, only for buttons with a message', async () => {
         const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
-        const collections = new CollectionManager()
+        const collections = manager()
         const added = collections.add('tasks')
 
         expect(await collections.remove(input(added, 'button'))).toBe(false)
@@ -234,7 +256,7 @@ describe('remove', () => {
 
     it('asks through the confirm option when given', async () => {
         const confirm = vi.fn(async () => true)
-        const collections = new CollectionManager({ confirm })
+        const collections = manager({ confirm })
         const added = collections.add('tasks')
 
         expect(await collections.remove(input(added, 'button'))).toBe(true)
@@ -243,7 +265,7 @@ describe('remove', () => {
 
     it('skips the dialog with confirm: false', async () => {
         const confirm = vi.fn(() => false)
-        const collections = new CollectionManager({ confirm })
+        const collections = manager({ confirm })
         const added = collections.add('tasks')
 
         expect(await collections.remove(input(added, 'button'), { confirm: false })).toBe(true)
@@ -256,12 +278,12 @@ describe('remove', () => {
             '<section class="card"><input id="tasks_1_label" name="tasks[1][label]"><button data-item=".card"></button></section>'
         )
 
-        expect(await new CollectionManager().remove($('.card button'))).toBe(true)
+        expect(await manager().remove($('.card button'))).toBe(true)
         expect($('.card')).toBeNull()
     })
 
     it('ignores a target outside any item or collection', async () => {
-        const collections = new CollectionManager()
+        const collections = manager()
         const stray = document.createElement('div')
         stray.className = 'collection-item'
         document.body.append(stray)
@@ -282,13 +304,13 @@ describe('items, clear and each', () => {
     })
 
     it('lists direct items only', () => {
-        expect(new CollectionManager().items('tasks')).toHaveLength(1)
-        expect(new CollectionManager().items('tasks_0_steps')).toHaveLength(1)
+        expect(manager().items('tasks')).toHaveLength(1)
+        expect(manager().items('tasks_0_steps')).toHaveLength(1)
     })
 
     it('clears every item without asking', async () => {
         const confirm = vi.fn(() => false)
-        const collections = new CollectionManager({ confirm })
+        const collections = manager({ confirm })
         collections.add('tasks')
 
         await collections.clear('tasks')
@@ -298,7 +320,7 @@ describe('items, clear and each', () => {
     })
 
     it('runs for existing and added items until stopped, with each item as a FormView', () => {
-        const collections = new CollectionManager()
+        const collections = manager()
         const seen: Array<[number, string, string[]]> = []
         const stop = collections.each('tasks', ({ index, form }) => {
             seen.push([index, form.get('label').id, form.children.map((child) => child.name)])
@@ -315,7 +337,7 @@ describe('items, clear and each', () => {
     })
 
     it('accepts a FormView as the collection', () => {
-        const collections = new CollectionManager()
+        const collections = manager()
         const tasks = formView('tasks')
 
         collections.add(tasks, { label: 'From a view' })
@@ -329,13 +351,13 @@ describe('items, clear and each', () => {
         $('#tasks').insertAdjacentHTML('beforeend', ITEM('4'))
         const indexes: number[] = []
 
-        new CollectionManager().each('tasks', ({ index }) => indexes.push(index))
+        manager().each('tasks', ({ index }) => indexes.push(index))
 
         expect(indexes).toEqual([0, 4])
     })
 
     it('ignores items added to a nested collection', () => {
-        const collections = new CollectionManager()
+        const collections = manager()
         const handler = vi.fn()
         collections.each('tasks', handler)
         handler.mockClear()
@@ -346,39 +368,59 @@ describe('items, clear and each', () => {
     })
 })
 
-describe('listener', () => {
-    it('adds an item from the add button, mounted by the adopted app', () => {
-        const mounted = vi.fn()
-        const collections = new CollectionManager()
-        const app = new App({ listeners: [collections.listener, { selector: '.form-control', connect: mounted }] })
+describe('collectionListener', () => {
+    /** An app with the manager as the "collections" service, its buttons' listener and `listeners`, mounted */
+    const appWith = (options: Partial<CollectionOptions> = {}, listeners: Listener[] = []) => {
+        const factory = vi.fn(
+            (container): CollectionManager => new CollectionManager({ app: container.get('app'), ...options })
+        )
+        const app = new App({
+            services: { collections: factory },
+            listeners: [collectionListener('collections'), ...listeners],
+        })
         app.mount(document)
+
+        return { app, factory, collections: (): CollectionManager => app.get('collections') }
+    }
+
+    it('adds an item from the add button, mounted by the app', () => {
+        const mounted = vi.fn()
+        const { app, collections } = appWith({}, [{ selector: '.form-control', connect: mounted }])
         mounted.mockClear()
 
         $('.add-collection').click()
 
-        expect(collections.items('tasks')).toHaveLength(2)
+        expect(collections().items('tasks')).toHaveLength(2)
         expect(mounted).toHaveBeenCalledWith($('#tasks_1_label'), { app })
     })
 
+    it('builds the manager on the first click only', () => {
+        const { factory } = appWith()
+        expect(factory).not.toHaveBeenCalled()
+
+        $('.add-collection').click()
+        $('.add-collection').click()
+
+        expect(factory).toHaveBeenCalledOnce()
+    })
+
     it('removes an item from its remove button without bubbling the click', async () => {
-        const collections = new CollectionManager()
-        new App({ listeners: [collections.listener] }).mount(document)
+        const { collections } = appWith()
         const outside = vi.fn()
         document.body.addEventListener('click', outside)
 
         $('.remove-collection').click()
         await Promise.resolve()
 
-        expect(collections.items('tasks')).toEqual([])
+        expect(collections().items('tasks')).toEqual([])
         expect(outside).not.toHaveBeenCalled()
     })
 
     it('connects buttons added with an item', () => {
-        const collections = new CollectionManager()
-        new App({ listeners: [collections.listener] }).mount(document)
+        const { collections } = appWith()
         $('.add-collection').click()
 
-        const added = collections.items('tasks')[1]
+        const added = collections().items('tasks')[1]
         vi.spyOn(window, 'confirm').mockReturnValue(true)
         input(added, 'button').click()
 
@@ -388,25 +430,23 @@ describe('listener', () => {
     it('logs an add button with no collection next to it', () => {
         const error = vi.spyOn(console, 'error').mockImplementation(() => {})
         document.body.insertAdjacentHTML('beforeend', '<button class="add-collection" id="lost"></button>')
-        const collections = new CollectionManager()
-        new App({ listeners: [collections.listener] }).mount(document)
+        appWith()
 
         $('#lost').click()
 
-        expect(error).toHaveBeenCalledWith('No ".form-collection" found next to', $('#lost'))
+        expect(error).toHaveBeenCalledWith('Failed to add collection item', expect.any(Error))
     })
 
     it('logs a failed removal', async () => {
         const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-        const collections = new CollectionManager({
+        const { collections } = appWith({
             confirm: () => {
                 throw new Error('dialog failed')
             },
         })
-        new App({ listeners: [collections.listener] }).mount(document)
         $('.add-collection').click()
 
-        input(collections.items('tasks')[1], 'button').click()
+        input(collections().items('tasks')[1], 'button').click()
 
         await vi.waitFor(() =>
             expect(error).toHaveBeenCalledWith('Failed to remove collection item', expect.any(Error))
@@ -414,44 +454,39 @@ describe('listener', () => {
     })
 
     it('stops listening once unmounted', () => {
-        const collections = new CollectionManager()
-        const app = new App({ listeners: [collections.listener] })
-        app.mount(document)
+        const { app, collections } = appWith()
         app.unmount(document)
 
         $('.add-collection').click()
 
-        expect(collections.items('tasks')).toHaveLength(1)
+        expect(collections().items('tasks')).toHaveLength(1)
     })
 
-    it('follows custom selectors', () => {
+    it('follows custom selectors, the buttons on the listener and the markup on the manager', () => {
         document.body.innerHTML = `
             <fieldset class="rows-wrapper">
                 <div id="rows" class="rows" data-prototype='<p class="row"><input id="rows___name___v"></p>'></div>
                 <a class="row-add"></a>
             </fieldset>`
-        const collections = new CollectionManager({
-            selectors: {
-                collection: '.rows',
-                item: '.row',
-                wrapper: '.rows-wrapper',
-                add: '.row-add',
-                remove: '.row-remove',
-            },
-        })
-        new App({ listeners: [collections.listener] }).mount(document)
+        const listener = collectionListener('collections', { add: '.row-add', remove: '.row-remove' })
+        const collections = manager({ selectors: { collection: '.rows', item: '.row', wrapper: '.rows-wrapper' } })
+        new App({ services: { collections: () => collections }, listeners: [listener] }).mount(document)
 
         $('.row-add').click()
 
-        expect(collections.listener.selector).toBe('.row-add, .row-remove')
+        expect(listener.selector).toBe('.row-add, .row-remove')
         expect(collections.items('rows')).toHaveLength(1)
-        expect(collections.selectors).toEqual({
-            ...DEFAULT_SELECTORS,
-            collection: '.rows',
-            item: '.row',
-            wrapper: '.rows-wrapper',
-            add: '.row-add',
-            remove: '.row-remove',
+        expect(collections.selectors).toEqual({ collection: '.rows', item: '.row', wrapper: '.rows-wrapper' })
+        expect(DEFAULT_BUTTON_SELECTORS).toEqual({ add: '.add-collection', remove: '.remove-collection' })
+        expect(DEFAULT_SELECTORS).toEqual({
+            collection: '.form-collection',
+            item: '.collection-item',
+            wrapper: '.collection-wrapper',
         })
+    })
+
+    it('only takes the id of a CollectionManager service', () => {
+        // @ts-expect-error "app" is the App, not a CollectionManager
+        expect(collectionListener('app').selector).toBe('.add-collection, .remove-collection')
     })
 })
