@@ -209,7 +209,7 @@ that failed. Listeners and pages can call `app.reportError(error, context)` to r
 ### Forms
 
 ```js
-import { CollectionManager, Field, FormDefinition, formView } from '@silarhi/app-js/form'
+import { CollectionManager, collectionListener, Field, FormDefinition, formView } from '@silarhi/app-js/form'
 ```
 
 **Form views.** `formView()` reads a rendered Symfony form straight from the DOM, by path:
@@ -313,17 +313,29 @@ every call: `setFieldDefaults()` replaces them and returns their restoration. `b
 hiddenClass, requiredClass })` returns the markup parts; the native level uses its defaults (`.form-group`, a `hidden`
 class, a `required` label class), and its `label` looks in `field.group`, so a `group` from any level moves it too.
 
-**Collections.** `CollectionManager` adds items from `data-prototype` and removes them. It mounts new items, unmounts
-removed ones, and exposes its add/remove buttons as a listener. Its options only plug collaborators in:
+**Collections.** `CollectionManager` adds items from `data-prototype` and removes them, mounting new items and
+unmounting removed ones. It is a service like any other, given its app; `collectionListener(id)` hands it the add and
+remove buttons, reading the service from the app on the first click, so the manager is only built where a collection
+is used:
 
-```js
-const collections = new CollectionManager({
-    confirm: (message) => app.get('modalManager').confirm(message), // default: window.confirm
-    selectors: { collection: '.form-collection' }, // item, wrapper, add, remove
+```ts
+const app = new App({
+    services: {
+        collections: (container): CollectionManager =>
+            new CollectionManager({
+                app: container.get('app'),
+                confirm: (message) => container.get('modalManager').confirm(message), // default: window.confirm
+                selectors: { collection: '.form-collection' }, // item, wrapper
+            }),
+    },
+    listeners: [collectionListener('collections')], // or ('collections', { add: '.add-row', remove: '.remove-row' })
 })
-
-const app = new App({ listeners: [collections.listener], services: { collections: () => collections } })
 ```
+
+The id is typed against `ServiceMap`: `collectionListener()` only takes the id of a `CollectionManager` service. The
+markup selectors are the manager's (`DEFAULT_SELECTORS`), the button selectors the listener's
+(`DEFAULT_BUTTON_SELECTORS`). An add button adds to the collection of its wrapper, as `collections.addFrom(button)`
+does; a remove button's click does not bubble.
 
 The lifecycle goes through bubbling events on the collection element, with `{ collection, item, index }` as detail.
 Listen on `document` for every collection, or on one collection element:

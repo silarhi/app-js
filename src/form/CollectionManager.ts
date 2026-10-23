@@ -9,7 +9,7 @@
 
 import type { App } from '../App'
 import { appendHTML, byId, on, trigger } from '../dom'
-import type { Cleanup, Listener } from '../types'
+import type { Cleanup } from '../types'
 import { FormView } from './FormView'
 import { fillForm } from './fillForm'
 
@@ -17,22 +17,19 @@ import { fillForm } from './fillForm'
  * The markup contract, matching a Symfony collection form theme: a wrapper
  * holding the collection (`data-prototype`) and its add button, items with a
  * remove button each. A remove button may target another ancestor with
- * `data-item=".selector"`.
+ * `data-item=".selector"`. The buttons themselves are the listener's, see
+ * `collectionListener()`.
  */
 export interface CollectionSelectors {
     collection: string
     item: string
     wrapper: string
-    add: string
-    remove: string
 }
 
 export const DEFAULT_SELECTORS: CollectionSelectors = {
     collection: '.form-collection',
     item: '.collection-item',
     wrapper: '.collection-wrapper',
-    add: '.add-collection',
-    remove: '.remove-collection',
 }
 
 /**
@@ -63,8 +60,8 @@ export interface CollectionItemDetail {
 export type ConfirmHandler = (message: string, detail: CollectionItemDetail) => boolean | Promise<boolean>
 
 export interface CollectionOptions {
-    /** Mounts added items and unmounts removed ones. Adopted from the listener's context when omitted. */
-    app?: App
+    /** Mounts added items and unmounts removed ones. */
+    app: App
     selectors?: Partial<CollectionSelectors>
     /** Defaults to `window.confirm`. */
     confirm?: ConfirmHandler
@@ -80,31 +77,29 @@ type CollectionRef = HTMLElement | string | FormView
 
 /**
  * Adds and removes Symfony form collection items from their prototype and
- * keeps the App mounted on them. Options only plug collaborators in (the app,
- * the markup, the confirm dialog); the lifecycle is reported through
- * {@link COLLECTION_EVENTS}, and `each()` for one collection's items.
+ * keeps the App mounted on them: a service, registered like any other, whose
+ * add/remove buttons `collectionListener()` hands to it. Options only plug
+ * collaborators in (the app, the markup, the confirm dialog); the lifecycle is
+ * reported through {@link COLLECTION_EVENTS}, and `each()` for one
+ * collection's items.
  *
- *     const collections = new CollectionManager({ confirm: (message) => dialogs.confirm(message) })
- *     new App({ listeners: [collections.listener] })
+ *     new App({
+ *         services: {
+ *             collections: (container): CollectionManager =>
+ *                 new CollectionManager({ app: container.get('app'), confirm: (message) => dialogs.confirm(message) }),
+ *         },
+ *         listeners: [collectionListener('collections')],
+ *     })
  */
 export class CollectionManager {
     readonly selectors: CollectionSelectors
-    /** Wires the add/remove buttons; register it on the App. */
-    readonly listener: Listener<HTMLElement>
     readonly #options: CollectionOptions
-    #app?: App
+    readonly #app: App
 
-    constructor(options: CollectionOptions = {}) {
+    constructor(options: CollectionOptions) {
         this.#options = options
         this.#app = options.app
         this.selectors = { ...DEFAULT_SELECTORS, ...options.selectors }
-        this.listener = {
-            selector: `${this.selectors.add}, ${this.selectors.remove}`,
-            connect: (button, { app }) => {
-                this.#app ??= app
-                return on(button, 'click', (event) => this.#onClick(button, event))
-            },
-        }
     }
 
     /**
@@ -120,10 +115,23 @@ export class CollectionManager {
         const detail = this.#detail(element, item, view)
 
         trigger(element, COLLECTION_EVENTS.add, detail)
-        this.#app?.mount(item)
+        this.#app.mount(item)
         trigger(element, COLLECTION_EVENTS.added, detail)
 
         return item
+    }
+
+    /**
+     * Append an item to the collection next to `button`: the one its wrapper
+     * holds, as an add button placed after the collection finds it.
+     */
+    addFrom(button: Element, values: Record<string, unknown> = {}): HTMLElement {
+        const collection = button.closest(this.selectors.wrapper)?.querySelector<HTMLElement>(this.selectors.collection)
+        if (!collection) {
+            throw new Error(`No "${this.selectors.collection}" found in the "${this.selectors.wrapper}" of the button.`)
+        }
+
+        return this.add(collection, values)
     }
 
     /**
@@ -145,7 +153,7 @@ export class CollectionManager {
             return false
         }
 
-        this.#app?.unmount(item)
+        this.#app.unmount(item)
         item.remove()
         trigger(collection, COLLECTION_EVENTS.removed, detail)
 
@@ -204,24 +212,6 @@ export class CollectionManager {
         const confirm = this.#options.confirm ?? ((text: string) => window.confirm(text))
 
         return confirm(message, detail)
-    }
-
-    #onClick(button: HTMLElement, event: Event): void {
-        event.preventDefault()
-
-        if (button.matches(this.selectors.remove)) {
-            event.stopPropagation()
-            this.remove(button).catch((error: unknown) => console.error('Failed to remove collection item', error))
-            return
-        }
-
-        const collection = button.closest(this.selectors.wrapper)?.querySelector<HTMLElement>(this.selectors.collection)
-        if (!collection) {
-            console.error(`No "${this.selectors.collection}" found next to`, button)
-            return
-        }
-
-        this.add(collection)
     }
 
     /**
