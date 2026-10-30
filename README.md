@@ -10,6 +10,8 @@ Turbo required.
 - **Services** — a lazy container with typed ids and Symfony's services / parameters split
 - **Forms** (`@silarhi/app-js/form`) — Symfony form collections, dependent-field rules, value helpers
 - **HTTP** (`@silarhi/app-js/http`) — `fetch()` helpers that speak Symfony's AJAX conventions
+- **Ready-made listeners** (`@silarhi/app-js/listeners`) — autosubmit, submit-once, check-all, password toggle,
+  copy to clipboard, passkeys
 - **Testing** (`@silarhi/app-js/testing`) — fixtures and listener harnesses for an app's own tests
 
 ```bash
@@ -454,6 +456,40 @@ try {
 
 `sendJson()` and `postForm()` resolve to the JSON answer, `null` when there is none (204) or it is not JSON. Each
 helper takes `fetch()` options last (headers, `signal`…), and `request(url, init)` is the base they share.
+
+### Ready-made listeners
+
+`@silarhi/app-js/listeners` holds listeners with no library behind them. Each is a factory whose options default to
+`data-` attributes, so an app bundles only the ones it registers and can keep its own markup:
+
+```js
+import { autoSubmit, checkAll, copyToClipboard, passwordToggle, submitOnce, webauthn } from '@silarhi/app-js/listeners'
+
+new App({
+    listeners: [
+        autoSubmit(), // [data-autosubmit]
+        autoSubmit({ selector: '[data-otp-autosubmit]', event: 'complete.bs.otpInput' }),
+        submitOnce(), // form[data-submit-once]
+        checkAll({ selector: '.check-all-container', master: '.check-all', item: '.check-item' }),
+        passwordToggle(), // [data-password-toggle]
+        copyToClipboard({ onSuccess: (button, text, { app }) => app.get('toasts').success('Copied') }),
+        webauthn({ messages: { notAllowed: 'La clé d’accès n’a pas été utilisée : réessayez.' } }),
+    ],
+})
+```
+
+| Listener | Markup | Does |
+|---|---|---|
+| `autoSubmit()` | `[data-autosubmit]` on a field (or a form) | `requestSubmit()` its form on `change` (or the `event` given) |
+| `submitOnce()` | `form[data-submit-once]` | disables its submit buttons while it submits, sets `aria-busy` |
+| `checkAll()` | `[data-check-all]` holding `[data-check-all-master]`, `[data-check-all-item]`, `[data-check-all-action]` | a master checks every item (indeterminate when some are); the actions show once one is checked |
+| `passwordToggle()` | `[data-password-toggle][aria-controls]`, `data-label-show` / `data-label-hide`, `[data-password-toggle-icon="show"/"hide"]` | shows / hides the password, hidden again on submit and on unmount |
+| `copyToClipboard()` | `[data-copy="text"]` or `[data-copy-target="#selector"]` | copies on click, then `onSuccess` / `onError` |
+| `webauthn()` | `form[data-webauthn-options]` (JSON), `data-webauthn-action="register"`, `[data-webauthn-response]`, `[data-webauthn-error]` | runs the passkey ceremony on submit, then submits its answer |
+
+`submitOnce()` waits for every submit handler: a submission one cancelled (validation, a confirm dialog) disables
+nothing, and a Turbo one locks on `turbo:submit-start` and releases on `turbo:submit-end`. `checkAll()` and
+`passwordToggle()` hide with the app-wide class (`setHiddenClass('d-none')` for Bootstrap).
 
 ### Testing
 
