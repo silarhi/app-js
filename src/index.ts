@@ -23,7 +23,8 @@ export type {
     ServicesOf,
 } from './Container'
 export { Container, defineServices } from './Container'
-export { HIDDEN_CLASS, hide, show, toggle } from './css'
+export { getHiddenClass, HIDDEN_CLASS, hide, setHiddenClass, show, toggle } from './css'
+export type { ElementType } from './dom'
 export { appendHTML, byId, domReady, escapeHtml, findAll, findAllSelf, findOne, on, trigger } from './dom'
 export { lazyListener } from './lazyListener'
 export type {

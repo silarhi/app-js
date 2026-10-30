@@ -171,6 +171,92 @@ describe('listeners', () => {
         expect(listener.connected.map((el) => el.id)).toEqual(['a1', 'b1', 'c', 'a1'])
     })
 
+    describe('persistent elements', () => {
+        const PAGE =
+            '<header data-turbo-permanent id="player"><p id="track"></p><turbo-frame id="queue"><p id="next"></p></turbo-frame></header>' +
+            '<main><p id="content"></p></main>'
+
+        const ids = (elements: Element[]): string[] => elements.map((el) => el.id).sort()
+
+        it('keeps what they hold connected across a page unmount', () => {
+            document.body.innerHTML = PAGE
+            const listener = spyListener('p')
+            const app = new App({ listeners: [listener], persistent: '[data-turbo-permanent]' })
+            app.mount()
+
+            app.unmount()
+            app.mount()
+
+            expect(ids(listener.disconnected)).toEqual(['content'])
+            expect(ids(listener.connected)).toEqual(['content', 'content', 'next', 'track'])
+        })
+
+        it('tears them down once a render dropped them', () => {
+            document.body.innerHTML = PAGE
+            const listener = spyListener('p')
+            const app = new App({ listeners: [listener], persistent: '[data-turbo-permanent]' })
+            app.mount()
+
+            document.getElementById('player')?.remove()
+            app.unmount()
+
+            expect(ids(listener.disconnected)).toEqual(['content', 'next', 'track'])
+        })
+
+        it('tears down what an unmount of the persistent element itself, or of a part of it, covers', () => {
+            document.body.innerHTML = PAGE
+            const listener = spyListener('p')
+            const app = new App({ listeners: [listener], persistent: '[data-turbo-permanent]' })
+            app.mount()
+
+            app.unmount(document.getElementById('queue') as Element)
+            expect(ids(listener.disconnected)).toEqual(['next'])
+
+            app.unmount(document.getElementById('player') as Element)
+            expect(ids(listener.disconnected)).toEqual(['next', 'track'])
+        })
+
+        it('keeps the persistent element itself, but not once it or an element in it is the container', () => {
+            document.body.innerHTML = PAGE
+            const listener = spyListener('header, p')
+            const app = new App({ listeners: [listener], persistent: '[data-turbo-permanent]' })
+            app.mount()
+
+            app.unmount()
+            expect(ids(listener.disconnected)).toEqual(['content'])
+
+            app.unmount(document.getElementById('track') as Element)
+            expect(ids(listener.disconnected)).toEqual(['content', 'track'])
+
+            app.unmount(document.getElementById('player') as Element)
+            expect(ids(listener.disconnected)).toEqual(['content', 'next', 'player', 'track'])
+        })
+
+        it('tears down the persistent elements nested in a persistent container', () => {
+            document.body.innerHTML =
+                '<header data-turbo-permanent id="player"><div data-turbo-permanent id="volume"><p id="level"></p></div></header>'
+            const listener = spyListener('p')
+            const app = new App({ listeners: [listener], persistent: '[data-turbo-permanent]' })
+            app.mount()
+
+            app.unmount()
+            expect(listener.disconnected).toEqual([])
+
+            app.unmount(document.getElementById('player') as Element)
+            expect(ids(listener.disconnected)).toEqual(['level'])
+        })
+
+        it('keeps nothing without the option', () => {
+            document.body.innerHTML = PAGE
+            const listener = spyListener('p')
+            const app = new App({ listeners: [listener] })
+            app.mount()
+            app.unmount()
+
+            expect(ids(listener.disconnected)).toEqual(['content', 'next', 'track'])
+        })
+    })
+
     it('keeps mounting when a listener throws', () => {
         vi.spyOn(console, 'error').mockImplementation(() => {})
         document.body.innerHTML = '<p></p>'

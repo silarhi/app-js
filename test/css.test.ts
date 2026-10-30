@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { HIDDEN_CLASS, hide, show, toggle } from '../src'
+import { getHiddenClass, HIDDEN_CLASS, hide, setHiddenClass, show, toggle } from '../src'
 
 describe('visibility helpers', () => {
     it('toggle the hidden class', () => {
@@ -38,5 +38,26 @@ describe('visibility helpers', () => {
         toggle(element, false, 'd-none')
         show(element, 'd-none')
         expect(element.className).toBe('')
+    })
+})
+
+describe('setHiddenClass', () => {
+    it('changes the default class until restored', () => {
+        const element = document.createElement('div')
+        const restore = setHiddenClass('d-none')
+
+        try {
+            expect(getHiddenClass()).toBe('d-none')
+            hide(element)
+            expect(element.className).toBe('d-none')
+            toggle(element, true)
+            expect(element.className).toBe('')
+        } finally {
+            restore()
+        }
+
+        expect(getHiddenClass()).toBe(HIDDEN_CLASS)
+        hide(element)
+        expect(element.className).toBe('hidden')
     })
 })

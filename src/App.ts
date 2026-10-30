@@ -32,6 +32,12 @@ export interface AppOptions {
     parameters?: Parameters
     /** Receives every error the app catches (Sentry, a logger…). Defaults to `console.error`. */
     onError?: ErrorHandler
+    /**
+     * Elements a render moves to the next page instead of replacing them,
+     * like Turbo's `[data-turbo-permanent]`: `unmount()` leaves what they hold
+     * connected, so it is not torn down and connected again.
+     */
+    persistent?: string
 }
 
 /**
@@ -56,6 +62,7 @@ export class App {
     readonly #cleanups = new WeakMap<Element, Map<Listener, Cleanup>>()
     readonly #connecting = new Map<Promise<unknown>, Element>()
     readonly #onError: ErrorHandler
+    readonly #persistent: string | undefined
     #started = false
     #mounted = false
 
@@ -69,8 +76,10 @@ export class App {
         services = {},
         parameters = {},
         onError = logError,
+        persistent,
     }: AppOptions = {}) {
         this.#onError = onError
+        this.#persistent = persistent
         this.container = new Container({ services, parameters })
         this.container.set('app', () => this)
         for (const module of modules) {
@@ -186,6 +195,9 @@ export class App {
 
             for (const element of tracked) {
                 if (element.isConnected && element !== container && !container.contains(element)) {
+                    continue
+                }
+                if (this.#survives(element, container)) {
                     continue
                 }
 
@@ -309,6 +321,31 @@ export class App {
         await pending
 
         return this.loadPage(pageId, params, container)
+    }
+
+    /**
+     * Whether `unmount(container)` leaves `element` connected, because it sits
+     * in a persistent element (`AppOptions.persistent`) the render moves to
+     * the next page. An element no longer in the document never survives: the
+     * next page had no such element, so it is gone for good.
+     */
+    #survives(element: Element, container: ParentNode): boolean {
+        if (!this.#persistent || !element.isConnected) {
+            return false
+        }
+
+        // A persistent container was targeted: all it holds goes, nested
+        // persistent elements included (as findAllSelf() matches its root)
+        if (container instanceof Element && container.matches(this.#persistent)) {
+            return false
+        }
+
+        // Else only a persistent element within the container is moved; one
+        // holding it (a frame inside the persistent element) is not. closest()
+        // matches the element itself, so it may be the persistent one.
+        const persistent = element.closest(this.#persistent)
+
+        return persistent !== null && container.contains(persistent)
     }
 
     #allListeners(): Listener[] {

@@ -13,6 +13,7 @@ export { bindField, getFieldDefaults, setFieldDefaults } from './behavior'
 export type { BootstrapThemeOptions } from './bootstrap'
 export { bootstrapTheme } from './bootstrap'
 export type {
+    CollectionEventMap,
     CollectionItemDetail,
     CollectionOptions,
     CollectionSelectors,

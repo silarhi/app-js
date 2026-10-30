@@ -53,6 +53,19 @@ export interface CollectionItemDetail {
 }
 
 /**
+ * The `COLLECTION_EVENTS` as the DOM event maps know them, so `on()` and
+ * `addEventListener()` type their `detail` on an element and on `document`.
+ */
+export type CollectionEventMap = {
+    [K in (typeof COLLECTION_EVENTS)[keyof typeof COLLECTION_EVENTS]]: CustomEvent<CollectionItemDetail>
+}
+
+declare global {
+    interface HTMLElementEventMap extends CollectionEventMap {}
+    interface DocumentEventMap extends CollectionEventMap {}
+}
+
+/**
  * Asks before a removal: plug the app's dialog (SweetAlert, a Bootstrap
  * modal…) here. `message` is the remove button's `data-confirm-message`;
  * buttons without one remove right away.

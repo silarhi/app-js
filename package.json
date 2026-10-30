@@ -34,6 +34,14 @@
         "./form": {
             "types": "./dist/form.d.mts",
             "import": "./dist/form.mjs"
+        },
+        "./http": {
+            "types": "./dist/http.d.mts",
+            "import": "./dist/http.mjs"
+        },
+        "./testing": {
+            "types": "./dist/testing.d.mts",
+            "import": "./dist/testing.mjs"
         }
     },
     "scripts": {

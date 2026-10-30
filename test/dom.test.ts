@@ -50,6 +50,17 @@ describe('byId', () => {
         expect(byId('detached')).toBeNull()
         expect(byId('detached', fragment.content)?.tagName).toBe('P')
     })
+
+    it('checks the type it is given, within a scope too', () => {
+        const root = document.getElementById('root') as HTMLElement
+        root.insertAdjacentHTML('beforeend', '<input id="field">')
+
+        const input: HTMLInputElement | null = byId('field', HTMLInputElement)
+        expect(input?.tagName).toBe('INPUT')
+        expect(byId('field', HTMLInputElement, root)).toBe(input)
+        expect(byId('root', HTMLInputElement)).toBeNull()
+        expect(byId('missing', HTMLInputElement)).toBeNull()
+    })
 })
 
 describe('findOne / findAll', () => {
