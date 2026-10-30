@@ -39,6 +39,10 @@
             "types": "./dist/http.d.mts",
             "import": "./dist/http.mjs"
         },
+        "./listeners": {
+            "types": "./dist/listeners.d.mts",
+            "import": "./dist/listeners.mjs"
+        },
         "./testing": {
             "types": "./dist/testing.d.mts",
             "import": "./dist/testing.mjs"
