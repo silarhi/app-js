@@ -232,6 +232,20 @@ describe('listeners', () => {
             expect(ids(listener.disconnected)).toEqual(['content', 'next', 'player', 'track'])
         })
 
+        it('tears down the persistent elements nested in a persistent container', () => {
+            document.body.innerHTML =
+                '<header data-turbo-permanent id="player"><div data-turbo-permanent id="volume"><p id="level"></p></div></header>'
+            const listener = spyListener('p')
+            const app = new App({ listeners: [listener], persistent: '[data-turbo-permanent]' })
+            app.mount()
+
+            app.unmount()
+            expect(listener.disconnected).toEqual([])
+
+            app.unmount(document.getElementById('player') as Element)
+            expect(ids(listener.disconnected)).toEqual(['level'])
+        })
+
         it('keeps nothing without the option', () => {
             document.body.innerHTML = PAGE
             const listener = spyListener('p')

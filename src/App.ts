@@ -334,13 +334,18 @@ export class App {
             return false
         }
 
-        // Only a persistent element strictly inside the container is moved: one
-        // that is the container (or holds it, as for a frame within it) was
-        // targeted. closest() and contains() both match the node itself, so an
-        // element that is the container, or is persistent itself, falls in line.
+        // A persistent container was targeted: all it holds goes, nested
+        // persistent elements included (as findAllSelf() matches its root)
+        if (container instanceof Element && container.matches(this.#persistent)) {
+            return false
+        }
+
+        // Else only a persistent element within the container is moved; one
+        // holding it (a frame inside the persistent element) is not. closest()
+        // matches the element itself, so it may be the persistent one.
         const persistent = element.closest(this.#persistent)
 
-        return persistent !== null && persistent !== container && container.contains(persistent)
+        return persistent !== null && container.contains(persistent)
     }
 
     #allListeners(): Listener[] {
