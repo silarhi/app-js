@@ -57,7 +57,7 @@
         "vite": "^8.0.0",
         "vitest": "^5.0.0"
     },
-    "packageManager": "pnpm@12.15.0",
+    "packageManager": "pnpm@12.16.0",
     "lint-staged": {
         "*.{ts,js,mjs,json}": "biome check --write --no-errors-on-unmatched"
     }
