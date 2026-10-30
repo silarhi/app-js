@@ -440,7 +440,8 @@ await postForm(form.action, form) // multipart, as the browser sends it, files i
 ```
 
 Every request carries `X-Requested-With: XMLHttpRequest`, so `Request::isXmlHttpRequest()` can answer a fragment.
-An answer outside 2xx rejects with an `HttpError` holding its `status` and, when it is JSON, its `body`:
+An answer outside 2xx rejects with an `HttpError` holding its `status` and its `body`: parsed when it is JSON, else its
+text (the form a 422 renders again, to put back in the page). `errorBody()` reads a JSON one:
 
 ```js
 try {
