@@ -206,9 +206,10 @@ describe('passwordToggle', () => {
         expect(input('password').type).toBe('password')
     })
 
-    it('finds the field next to a button that names none', () => {
+    it('finds the field of the input group of a button that names none', () => {
         mountFixture(
-            '<div><input id="password" type="password"><button type="button" id="eye" data-password-toggle></button></div>',
+            '<form><input type="hidden" name="_token"><div class="input-group"><input id="password" type="password">' +
+                '<span class="input-group-text"><button type="button" id="eye" data-password-toggle></button></span></div></form>',
             { listeners: [passwordToggle()] }
         )
 

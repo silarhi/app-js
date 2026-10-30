@@ -51,12 +51,13 @@ describe('request', () => {
         expect(errorBody<{ violations: unknown[] }>(error)?.violations).toHaveLength(1)
     })
 
-    it('keeps no body when the failed answer is not JSON', async () => {
-        fetchMock.mockResolvedValue(new Response('<h1>Oops</h1>', { status: 500 }))
+    it('keeps the text of a failed answer that is not JSON', async () => {
+        fetchMock.mockResolvedValue(new Response('<form>Invalid</form>', { status: 422 }))
 
-        const error = await getHtml('/agenda').catch((caught: unknown) => caught)
+        const error = await postForm('/report').catch((caught: unknown) => caught)
 
-        expect(statusOf(error)).toBe(500)
+        expect(statusOf(error)).toBe(422)
+        expect((error as HttpError).body).toBe('<form>Invalid</form>')
         expect(errorBody(error)).toBeUndefined()
     })
 

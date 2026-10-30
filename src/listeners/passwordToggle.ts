@@ -18,7 +18,8 @@ export interface PasswordToggleOptions {
 
 /**
  * The show / hide button of a password field. The field is the one its
- * `aria-controls` names, else the input next to the button.
+ * `aria-controls` names, else the input of its closest ancestor holding one
+ * (its input group, however deep the button sits).
  *
  * Each click flips the field's type and the button's `aria-pressed`, takes
  * `data-label-hide` / `data-label-show` as its `aria-label` (and `title`, if
@@ -36,9 +37,7 @@ export function passwordToggle({
         selector,
         connect(button) {
             const controls = button.getAttribute('aria-controls')
-            const input = controls
-                ? byId(controls, HTMLInputElement)
-                : button.parentElement?.querySelector<HTMLInputElement>('input')
+            const input = controls ? byId(controls, HTMLInputElement) : fieldNear(button)
             if (!input) {
                 return undefined
             }
@@ -73,4 +72,16 @@ export function passwordToggle({
             }
         },
     }
+}
+
+/** The first visible input of the closest ancestor holding one: the button may sit deep in an input group. */
+function fieldNear(button: HTMLElement): HTMLInputElement | null {
+    for (let parent = button.parentElement; parent; parent = parent.parentElement) {
+        const input = parent.querySelector<HTMLInputElement>('input:not([type="hidden"])')
+        if (input) {
+            return input
+        }
+    }
+
+    return null
 }

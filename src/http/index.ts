@@ -11,8 +11,8 @@
  * AJAX requests over `fetch()`, with what a Symfony app expects of them:
  * - `X-Requested-With: XMLHttpRequest`, so `Request::isXmlHttpRequest()` can
  *   answer a fragment instead of a page
- * - an answer outside 2xx rejects (`fetch()` resolves it), carrying its JSON
- *   body: the violations of a 422, the detail of a 429
+ * - an answer outside 2xx rejects (`fetch()` resolves it), carrying its body:
+ *   the JSON violations of a 422, the HTML form a 422 renders again
  *
  * A request that gets no answer (offline, blocked) rejects with `fetch()`'s
  * `TypeError`, whose status `statusOf()` takes as 0.
@@ -22,7 +22,7 @@
 export class HttpError extends Error {
     constructor(
         readonly status: number,
-        /** The answer's body when it is JSON, else `undefined`. */
+        /** The answer's body: parsed when it is JSON, else its text (an HTML fragment…); `undefined` if unreadable. */
         readonly body: unknown
     ) {
         super(`HTTP ${status}`)
@@ -63,10 +63,8 @@ export async function request(url: string | URL, init: RequestInit = {}): Promis
 
     const response = await fetch(url, { ...init, headers })
     if (!response.ok) {
-        throw new HttpError(
-            response.status,
-            isJson(response) ? await response.json().catch(() => undefined) : undefined
-        )
+        const body = isJson(response) ? response.json() : response.text()
+        throw new HttpError(response.status, await body.catch(() => undefined))
     }
 
     return response
