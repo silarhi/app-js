@@ -7,13 +7,13 @@
  * with this source code in the file LICENSE.
  */
 
-import { HIDDEN_CLASS, toggle } from '../css'
+import { toggle } from '../css'
 import type { FieldBehavior } from './behavior'
 
 export interface BootstrapThemeOptions {
     /** Defaults to Symfony's `.form-group` row. */
     groupSelector?: string
-    /** Defaults to `hidden`; `d-none` for plain Bootstrap. */
+    /** Defaults to the app-wide one, see `setHiddenClass()`. */
     hiddenClass?: string
     requiredClass?: string
 }
@@ -26,7 +26,7 @@ export interface BootstrapThemeOptions {
  */
 export function bootstrapTheme({
     groupSelector = '.form-group',
-    hiddenClass = HIDDEN_CLASS,
+    hiddenClass,
     requiredClass = 'required',
 }: BootstrapThemeOptions = {}): Required<Pick<FieldBehavior, 'group' | 'label' | 'setVisible' | 'markRequired'>> {
     return {

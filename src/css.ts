@@ -7,20 +7,43 @@
  * with this source code in the file LICENSE.
  */
 
+import type { Cleanup } from './types'
+
 /**
  * Visibility through a utility class rather than the `hidden` attribute, which
- * any `display` rule overrides. Pass `'d-none'` for plain Bootstrap.
+ * any `display` rule overrides. The initial app-wide class, see
+ * `setHiddenClass()`.
  */
 export const HIDDEN_CLASS = 'hidden'
 
-export function show(element: Element, className: string = HIDDEN_CLASS): void {
+let hiddenClass = HIDDEN_CLASS
+
+/**
+ * Set the class `show` / `hide` / `toggle` and the form fields use when none
+ * is passed, once at boot: `setHiddenClass('d-none')` for plain Bootstrap.
+ * Returns the restoration of the previous one.
+ */
+export function setHiddenClass(className: string): Cleanup {
+    const previous = hiddenClass
+    hiddenClass = className
+
+    return () => {
+        hiddenClass = previous
+    }
+}
+
+export function getHiddenClass(): string {
+    return hiddenClass
+}
+
+export function show(element: Element, className: string = hiddenClass): void {
     element.classList.remove(className)
 }
 
-export function hide(element: Element, className: string = HIDDEN_CLASS): void {
+export function hide(element: Element, className: string = hiddenClass): void {
     element.classList.add(className)
 }
 
-export function toggle(element: Element, visible: boolean, className: string = HIDDEN_CLASS): void {
+export function toggle(element: Element, visible: boolean, className: string = hiddenClass): void {
     element.classList.toggle(className, !visible)
 }

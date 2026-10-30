@@ -65,11 +65,26 @@ export function domReady(): Promise<void> {
 }
 
 /**
+ * An element class, for the checked lookups: `HTMLInputElement`, `HTMLFormElement`…
+ */
+export type ElementType<E extends Element> = abstract new (...args: never[]) => E
+
+/**
  * The element with `id` within `scope`: `getElementById` on a document, an
  * attribute match anywhere else (fragments, scoped forms).
+ *
+ * Given a `type`, it is checked rather than asserted: an element of another
+ * type is `null` too, so `byId(input.dataset.to, HTMLInputElement)` needs no
+ * `instanceof` of its own.
  */
-export function byId<E extends Element = HTMLElement>(id: string, scope: ParentNode = document): E | null {
-    return scope instanceof Document ? (scope.getElementById(id) as E | null) : scope.querySelector<E>(`[id="${id}"]`)
+export function byId<E extends Element>(id: string, type: ElementType<E>, scope?: ParentNode): E | null
+export function byId<E extends Element = HTMLElement>(id: string, scope?: ParentNode): E | null
+export function byId(id: string, typeOrScope?: ElementType<Element> | ParentNode, scope?: ParentNode): Element | null {
+    const type = typeof typeOrScope === 'function' ? typeOrScope : undefined
+    const root = (type ? scope : (typeOrScope as ParentNode | undefined)) ?? document
+    const element = root instanceof Document ? root.getElementById(id) : root.querySelector(`[id="${id}"]`)
+
+    return !type || element instanceof type ? element : null
 }
 
 export function findOne<E extends Element = HTMLElement>(selector: string, root: ParentNode = document): E | null {

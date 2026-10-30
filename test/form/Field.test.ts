@@ -8,6 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setHiddenClass } from '../../src'
 import {
     bindField,
     bootstrapTheme,
@@ -396,6 +397,19 @@ describe('app level: setFieldDefaults', () => {
         name.hide()
         expect(getFieldDefaults()).toEqual([])
         expect(name.container.classList.contains('hidden')).toBe(true)
+    })
+
+    it('hides with the app-wide class when the theme names none', () => {
+        const name = new Field($('#user_name'))
+        const restore = setHiddenClass('d-none')
+
+        try {
+            name.hide()
+            expect(name.container.classList.contains('d-none')).toBe(true)
+            expect(name.container.classList.contains('hidden')).toBe(false)
+        } finally {
+            restore()
+        }
     })
 
     it('tries its behaviors in order, each able to defer with next()', () => {

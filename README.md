@@ -9,6 +9,8 @@ Turbo required.
 - **Pages** — lazy initializers declared in markup (`data-page`), each shipped in its own chunk
 - **Services** — a lazy container with typed ids and Symfony's services / parameters split
 - **Forms** (`@silarhi/app-js/form`) — Symfony form collections, dependent-field rules, value helpers
+- **HTTP** (`@silarhi/app-js/http`) — `fetch()` helpers that speak Symfony's AJAX conventions
+- **Testing** (`@silarhi/app-js/testing`) — fixtures and listener harnesses for an app's own tests
 
 ```bash
 pnpm add @silarhi/app-js
@@ -206,6 +208,10 @@ that failed. Listeners and pages can call `app.reportError(error, context)` to r
 `CustomEvent`, returned), `escapeHtml`, `appendHTML` (returns the appended elements) and `show` / `hide` / `toggle`
 (a `hidden` class by default; pass `'d-none'` for plain Bootstrap).
 
+`byId(id, HTMLInputElement, scope?)` checks the type instead of asserting it: an element of another type is `null`,
+like a missing one. `setHiddenClass('d-none')`, once at boot, makes `show` / `hide` / `toggle` and the form fields use
+that class when none is passed; it returns the restoration of the previous one.
+
 ### Forms
 
 ```js
@@ -347,6 +353,9 @@ Listen on `document` for every collection, or on one collection element:
 | `collection.remove`  | before confirmation; `preventDefault()` keeps the item |
 | `collection.removed` | item unmounted and removed                            |
 
+Importing `@silarhi/app-js/form` types them in `HTMLElementEventMap` and `DocumentEventMap`, so
+`on(document, 'collection.added', (event) => event.detail.item)` needs no cast.
+
 Only remove buttons with a `data-confirm-message` ask for confirmation.
 
 From a page, `collections.each(form.get('items'), ({ item, index, form }) => form.field('label').onChange(…))`
@@ -406,6 +415,73 @@ new TurboHandler({
     onUnmount: (container) => app.unmount(container),
 }).start()
 ```
+
+Turbo moves `data-turbo-permanent` elements to the next page instead of rendering them again. Tell the app, so a page
+unmount leaves what they hold connected instead of tearing it down and connecting it again:
+
+```js
+const app = new App({ persistent: '[data-turbo-permanent]', listeners: [/* … */] })
+```
+
+An unmount of the persistent element itself, or of a frame inside it, still disconnects what it covers, and a
+persistent element the next page dropped is disconnected by the next unmount.
+
+### HTTP
+
+```js
+import { errorBody, getHtml, getJson, postForm, sendJson, statusOf } from '@silarhi/app-js/http'
+
+const html = await getHtml(link.href) // then appendHTML() and app.mount() it
+const events = await getJson('/api/events', { params: { city: 'toulouse', page: 2 } })
+await sendJson('PUT', `/api/events/${id}/like`, { like: true })
+await postForm(form.action, form) // multipart, as the browser sends it, files included
+```
+
+Every request carries `X-Requested-With: XMLHttpRequest`, so `Request::isXmlHttpRequest()` can answer a fragment.
+An answer outside 2xx rejects with an `HttpError` holding its `status` and, when it is JSON, its `body`:
+
+```js
+try {
+    await postForm('/register', form)
+} catch (error) {
+    if (statusOf(error) === 422) {
+        showViolations(errorBody(error)?.violations) // the server's JSON, unchecked
+    } else if (statusOf(error) === 0) {
+        // no answer at all: offline, blocked
+    }
+}
+```
+
+`sendJson()` and `postForm()` resolve to the JSON answer, `null` when there is none (204) or it is not JSON. Each
+helper takes `fetch()` options last (headers, `signal`…), and `request(url, init)` is the base they share.
+
+### Testing
+
+`@silarhi/app-js/testing` brings no test runner of its own: reset its fixtures from yours.
+
+```js
+import { connectListener, mountFixture, resetFixtures } from '@silarhi/app-js/testing'
+import { afterEach, expect, it } from 'vitest'
+import autosubmit from '../listeners/autosubmit'
+
+afterEach(resetFixtures) // unmounts the fixtures' apps (listeners bound to `document` too) and empties the body
+
+it('submits on change', () => {
+    mountFixture('<form><select data-autosubmit></select></form>', { listeners: [autosubmit] })
+    // …
+})
+
+it('cleans up', () => {
+    const select = document.createElement('select')
+    const cleanup = connectListener(autosubmit, select) // throws if the listener returns no cleanup
+    cleanup()
+})
+```
+
+`mountFixture(html, options)` renders the body, then starts and mounts an `App` built from `options`; await
+`app.whenConnected()` for async connects. `connectListener(listener, element, app?)` connects one listener as
+`mount()` would and returns its cleanup; `connectListenerWithoutCleanup()` is for a listener that leaves nothing to
+undo, `connectListenerAsync()` for an async `connect`. Without `app`, a bare one is passed.
 
 ## License
 

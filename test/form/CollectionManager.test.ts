@@ -11,7 +11,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, escapeHtml, type Listener } from '../../src'
 import {
     COLLECTION_EVENTS,
-    type CollectionItemDetail,
     CollectionManager,
     type CollectionOptions,
     collectionListener,
@@ -60,7 +59,7 @@ describe('add', () => {
         })
         const collections = new CollectionManager({ app })
         $('#tasks').addEventListener(COLLECTION_EVENTS.add, (event) => {
-            order.push(`add ${(event as CustomEvent<CollectionItemDetail>).detail.index}`)
+            order.push(`add ${event.detail.index}`)
         })
         $('#tasks').addEventListener(COLLECTION_EVENTS.added, () => order.push('added'))
 
@@ -221,7 +220,7 @@ describe('remove', () => {
         })
         app.mount(document)
         const removed = vi.fn()
-        $('#tasks').addEventListener(COLLECTION_EVENTS.removed, (event) => removed((event as CustomEvent).detail))
+        $('#tasks').addEventListener(COLLECTION_EVENTS.removed, (event) => removed(event.detail))
         const collections = new CollectionManager({ app })
         const item = collections.items('tasks')[0]
 
