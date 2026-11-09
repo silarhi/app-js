@@ -59,7 +59,7 @@
         "prepare": "husky"
     },
     "devDependencies": {
-        "@biomejs/biome": "2.6.5",
+        "@biomejs/biome": "2.6.6",
         "@vitest/coverage-v8": "^5.0.5",
         "husky": "^9.1.7",
         "jsdom": "^30.0.0",
