@@ -9,6 +9,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, escapeHtml, type Listener } from '../../src'
+import { resetDeprecations } from '../../src/deprecation'
 import {
     COLLECTION_EVENTS,
     CollectionManager,
@@ -35,7 +36,7 @@ const manager = (options: Partial<CollectionOptions> = {}): CollectionManager =>
     new CollectionManager({ app: new App(), ...options })
 
 const ITEM = (name: string): string =>
-    `<div class="collection-item"><input id="tasks_${name}_label" name="tasks[${name}][label]" class="form-control"><button class="remove-collection" data-confirm-message="Sure?"></button></div>`
+    `<div class="collection-item"><input id="tasks_${name}_label" name="tasks[${name}][label]" class="form-control"><button class="remove-collection" data-collection-confirm-message="Sure?"></button></div>`
 
 beforeEach(() => {
     document.body.innerHTML = `
@@ -48,6 +49,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+    resetDeprecations()
     vi.restoreAllMocks()
 })
 
@@ -67,8 +69,8 @@ describe('add', () => {
 
         expect(order).toEqual(['add 1', 'mount tasks_1_label', 'added'])
         expect(item).toBe($('#tasks').lastElementChild)
-        expect(item.dataset.collectionIndex).toBe('1')
-        expect($('#tasks').dataset.index).toBe('2')
+        expect(item.dataset.collectionItemIndex).toBe('1')
+        expect($('#tasks').dataset.collectionIndex).toBe('2')
     })
 
     it('adds to the collection in the wrapper of a button', () => {
@@ -125,8 +127,8 @@ describe('next index', () => {
         expect(input(manager().add('tasks')).id).toBe('tasks_0_label')
     })
 
-    it('prefers a data-index rendered by the template', () => {
-        $('#tasks').dataset.index = '9'
+    it('prefers a data-collection-index rendered by the template', () => {
+        $('#tasks').dataset.collectionIndex = '9'
 
         expect(input(manager().add('tasks')).id).toBe('tasks_9_label')
     })
@@ -243,20 +245,86 @@ describe('remove', () => {
 
     it('asks through window.confirm by default, only for buttons with a message', async () => {
         const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+        $('#tasks').insertAdjacentHTML('beforeend', ITEM('1'))
         const collections = manager()
-        const added = collections.add('tasks')
 
-        expect(await collections.remove(input(added, 'button'))).toBe(false)
+        expect(await collections.remove(input(collections.items('tasks')[1], 'button'))).toBe(false)
         expect(confirm).toHaveBeenCalledWith('Sure?')
 
         expect(await collections.remove($('.remove-collection'))).toBe(true)
         expect(confirm).toHaveBeenCalledOnce()
     })
 
+    it('removes an added item left untouched without asking', async () => {
+        const confirm = vi.fn(() => false)
+        const collections = manager({ confirm })
+        const added = collections.add('tasks')
+
+        expect(await collections.remove(input(added, 'button'))).toBe(true)
+        expect(confirm).not.toHaveBeenCalled()
+    })
+
+    it('asks for an added item while one of its fields differs from the prototype', async () => {
+        const confirm = vi.fn(() => false)
+        const collections = manager({ confirm })
+        const added = collections.add('tasks')
+
+        input(added).value = 'Ship'
+        expect(await collections.remove(input(added, 'button'))).toBe(false)
+        expect(confirm).toHaveBeenCalledOnce()
+
+        input(added).value = ''
+        expect(await collections.remove(input(added, 'button'))).toBe(true)
+        expect(confirm).toHaveBeenCalledOnce()
+    })
+
+    it('asks for an item added with values', async () => {
+        const confirm = vi.fn(() => false)
+        const collections = manager({ confirm })
+        const added = collections.add('tasks', { label: 'Ship' })
+
+        expect(await collections.remove(input(added, 'button'))).toBe(false)
+        expect(confirm).toHaveBeenCalledOnce()
+    })
+
+    it('takes the starting value a mounted widget declares', async () => {
+        const confirm = vi.fn(() => false)
+        const app = new App({
+            listeners: [
+                {
+                    selector: '.form-control',
+                    connect: (field) => {
+                        const control = field as HTMLInputElement
+                        control.value = 'normalized'
+                        control.defaultValue = control.value
+                    },
+                },
+            ],
+        })
+        const collections = new CollectionManager({ app, confirm })
+        const added = collections.add('tasks')
+
+        expect(await collections.remove(input(added, 'button'))).toBe(true)
+        expect(confirm).not.toHaveBeenCalled()
+    })
+
+    it('marks the tracked form changed when a rendered item goes, not an added one', async () => {
+        document.body.innerHTML = `<form data-track-changes="">${document.body.innerHTML}</form>`
+        const form = $<HTMLFormElement>('form')
+        const collections = manager()
+
+        await collections.remove(collections.add('tasks'))
+        expect(form.dataset.trackChanges).toBe('')
+
+        await collections.remove(collections.items('tasks')[0])
+        expect(form.dataset.trackChanges).toBe('changed')
+    })
+
     it('asks through the confirm option when given', async () => {
         const confirm = vi.fn(async () => true)
         const collections = manager({ confirm })
         const added = collections.add('tasks')
+        input(added).value = 'Ship'
 
         expect(await collections.remove(input(added, 'button'))).toBe(true)
         expect(confirm).toHaveBeenCalledWith('Sure?', expect.objectContaining({ item: added, index: 1 }))
@@ -271,10 +339,10 @@ describe('remove', () => {
         expect(confirm).not.toHaveBeenCalled()
     })
 
-    it('removes the ancestor named by data-item', async () => {
+    it('removes the ancestor named by data-collection-item', async () => {
         $('#tasks').insertAdjacentHTML(
             'beforeend',
-            '<section class="card"><input id="tasks_1_label" name="tasks[1][label]"><button data-item=".card"></button></section>'
+            '<section class="card"><input id="tasks_1_label" name="tasks[1][label]"><button data-collection-item=".card"></button></section>'
         )
 
         expect(await manager().remove($('.card button'))).toBe(true)
@@ -289,6 +357,43 @@ describe('remove', () => {
 
         expect(await collections.remove($('.add-collection'))).toBe(false)
         expect(await collections.remove(stray)).toBe(false)
+    })
+})
+
+describe('former attributes', () => {
+    const deprecated = (legacy: string, attribute: string): string =>
+        `The "${legacy}" attribute is deprecated, use "${attribute}" instead.`
+
+    it('still reads data-index, data-confirm-message and data-item, warning once each', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        const confirm = vi.fn(() => true)
+        const collections = manager({ confirm })
+        $('#tasks').dataset.index = '7'
+        $('#tasks').insertAdjacentHTML(
+            'beforeend',
+            '<section class="card"><input id="tasks_5_label" name="tasks[5][label]"><button data-item=".card" data-confirm-message="Sure?"></button></section>'
+        )
+
+        expect(input(collections.add('tasks')).id).toBe('tasks_7_label')
+        expect(input(collections.add('tasks')).id).toBe('tasks_8_label')
+        expect(await collections.remove($('.card button'))).toBe(true)
+        expect(confirm).toHaveBeenCalledWith('Sure?', expect.anything())
+        expect($('.card')).toBeNull()
+
+        expect(warn.mock.calls).toEqual([
+            [deprecated('data-index', 'data-collection-index')],
+            [deprecated('data-item', 'data-collection-item')],
+            [deprecated('data-confirm-message', 'data-collection-confirm-message')],
+        ])
+    })
+
+    it('prefers the new attribute without warning', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        $('#tasks').dataset.index = '7'
+        $('#tasks').dataset.collectionIndex = '3'
+
+        expect(input(manager().add('tasks')).id).toBe('tasks_3_label')
+        expect(warn).not.toHaveBeenCalled()
     })
 })
 
@@ -444,8 +549,10 @@ describe('collectionListener', () => {
             },
         })
         $('.add-collection').click()
+        const added = collections().items('tasks')[1]
+        input(added).value = 'Ship'
 
-        input(collections().items('tasks')[1], 'button').click()
+        input(added, 'button').click()
 
         await vi.waitFor(() =>
             expect(error).toHaveBeenCalledWith('Failed to remove collection item', expect.any(Error))

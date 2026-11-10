@@ -8,8 +8,10 @@
  */
 
 import type { App } from '../App'
+import { getDataAttribute } from '../deprecation'
 import { appendHTML, byId, on, trigger } from '../dom'
 import type { Cleanup } from '../types'
+import { hasChanged, markFormChanged } from './changes'
 import { FormView } from './FormView'
 import { fillForm } from './fillForm'
 
@@ -17,8 +19,8 @@ import { fillForm } from './fillForm'
  * The markup contract, matching a Symfony collection form theme: a wrapper
  * holding the collection (`data-prototype`) and its add button, items with a
  * remove button each. A remove button may target another ancestor with
- * `data-item=".selector"`. The buttons themselves are the listener's, see
- * `collectionListener()`.
+ * `data-collection-item=".selector"`. The buttons themselves are the
+ * listener's, see `collectionListener()`.
  */
 export interface CollectionSelectors {
     collection: string
@@ -67,8 +69,9 @@ declare global {
 
 /**
  * Asks before a removal: plug the app's dialog (SweetAlert, a Bootstrap
- * modal…) here. `message` is the remove button's `data-confirm-message`;
- * buttons without one remove right away.
+ * modal…) here. `message` is the remove button's
+ * `data-collection-confirm-message`; buttons without one remove right away,
+ * as do items added on the page whose fields are still the prototype's.
  */
 export type ConfirmHandler = (message: string, detail: CollectionItemDetail) => boolean | Promise<boolean>
 
@@ -108,6 +111,8 @@ export class CollectionManager {
     readonly selectors: CollectionSelectors
     readonly #options: CollectionOptions
     readonly #app: App
+    /** The items added on the page: removing one untouched loses nothing. */
+    readonly #added = new WeakSet<HTMLElement>()
 
     constructor(options: CollectionOptions) {
         this.#options = options
@@ -127,6 +132,7 @@ export class CollectionManager {
         const item = this.#append(element, view, values)
         const detail = this.#detail(element, item, view)
 
+        this.#added.add(item)
         trigger(element, COLLECTION_EVENTS.add, detail)
         this.#app.mount(item)
         trigger(element, COLLECTION_EVENTS.added, detail)
@@ -152,7 +158,9 @@ export class CollectionManager {
      * Resolves to whether it was removed.
      */
     async remove(target: HTMLElement, { confirm = true }: { confirm?: boolean } = {}): Promise<boolean> {
-        const item = target.closest<HTMLElement>(target.dataset.item || this.selectors.item)
+        const item = target.closest<HTMLElement>(
+            getDataAttribute(target, 'data-collection-item', 'data-item') || this.selectors.item
+        )
         const collection = item?.parentElement?.closest<HTMLElement>(this.selectors.collection)
         if (!item || !collection) {
             return false
@@ -168,6 +176,10 @@ export class CollectionManager {
 
         this.#app.unmount(item)
         item.remove()
+        if (!this.#added.has(item)) {
+            // The form loses what the server rendered: no field is left to show it
+            markFormChanged(collection)
+        }
         trigger(collection, COLLECTION_EVENTS.removed, detail)
 
         return true
@@ -213,12 +225,14 @@ export class CollectionManager {
     }
 
     /**
-     * Ask only when the remove button carries `data-confirm-message`, through
-     * the `confirm` option or `window.confirm`.
+     * Ask only when the remove button carries `data-collection-confirm-message`,
+     * through the `confirm` option or `window.confirm`. An item added on the
+     * page goes without asking while its fields hold their default values:
+     * nothing typed in it is lost.
      */
     async #confirmRemoval(target: HTMLElement, detail: CollectionItemDetail): Promise<boolean> {
-        const message = target.dataset.confirmMessage
-        if (message === undefined) {
+        const message = getDataAttribute(target, 'data-collection-confirm-message', 'data-confirm-message')
+        if (message === undefined || (this.#added.has(detail.item) && !hasChanged(detail.item))) {
             return true
         }
 
@@ -229,7 +243,7 @@ export class CollectionManager {
 
     /**
      * Render the prototype with the next index, then keep the following one in
-     * `data-index`.
+     * `data-collection-index`.
      */
     #append(collection: HTMLElement, view: FormView, values: Record<string, unknown>): HTMLElement {
         const prototype = collection.dataset.prototype
@@ -238,12 +252,12 @@ export class CollectionManager {
         }
 
         const index = this.#nextIndex(collection, view)
-        collection.dataset.index = String(index + 1)
+        collection.dataset.collectionIndex = String(index + 1)
         const [item] = appendHTML(
             collection,
             prototype.replaceAll(collection.dataset.prototypeName || '__name__', String(index))
         ) as HTMLElement[]
-        item.dataset.collectionIndex = String(index)
+        item.dataset.collectionItemIndex = String(index)
         if (Object.keys(values).length > 0) {
             // Nested items are silent: the outer item's events cover them
             fillForm(view.get(String(index)), values, (nested, itemValues) => {
@@ -255,13 +269,13 @@ export class CollectionManager {
     }
 
     /**
-     * `data-index` when the template renders it, else one past the highest
-     * item index the collection's {@link FormView} sees. Counting children
+     * `data-collection-index` when the template renders it, else one past the
+     * highest item index the collection's {@link FormView} sees. Counting children
      * would collide once keys have gaps: items 0 and 2 left after a removal,
      * or a submitted form re-rendered with its original keys.
      */
     #nextIndex(collection: HTMLElement, view: FormView): number {
-        const stored = Number.parseInt(collection.dataset.index ?? '', 10)
+        const stored = Number.parseInt(getDataAttribute(collection, 'data-collection-index', 'data-index') ?? '', 10)
         if (!Number.isNaN(stored)) {
             return stored
         }
@@ -312,7 +326,7 @@ export class CollectionManager {
      * when no field tells.
      */
     #detail(collection: HTMLElement, item: HTMLElement, view: FormView): CollectionItemDetail {
-        const name = item.dataset.collectionIndex ?? view.childOf(item)?.name
+        const name = item.dataset.collectionItemIndex ?? view.childOf(item)?.name
         const index = name !== undefined && isIndex(name) ? Number(name) : this.items(collection).indexOf(item)
 
         return { collection, item, index }

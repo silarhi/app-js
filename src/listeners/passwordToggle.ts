@@ -8,6 +8,7 @@
  */
 
 import { toggle } from '../css'
+import { getDataAttribute } from '../deprecation'
 import { byId, findAll, on } from '../dom'
 import type { Listener } from '../types'
 
@@ -22,9 +23,10 @@ export interface PasswordToggleOptions {
  * (its input group, however deep the button sits).
  *
  * Each click flips the field's type and the button's `aria-pressed`, takes
- * `data-label-hide` / `data-label-show` as its `aria-label` (and `title`, if
- * it has one), and shows the `[data-password-toggle-icon="hide"]` or `="show"`
- * icon of the action a click now does.
+ * `data-password-toggle-label-hide` / `data-password-toggle-label-show` as its
+ * `aria-label` (and `title`, if it has one), and shows the
+ * `[data-password-toggle-icon="hide"]` or `="show"` icon of the action a click
+ * now does.
  *
  * The password is hidden again before the form sends (a text field would let
  * the browser keep it in its form history) and when the button is unmounted,
@@ -46,7 +48,9 @@ export function passwordToggle({
                 input.type = shown ? 'text' : 'password'
                 button.setAttribute('aria-pressed', String(shown))
 
-                const label = shown ? button.dataset.labelHide : button.dataset.labelShow
+                const label = shown
+                    ? getDataAttribute(button, 'data-password-toggle-label-hide', 'data-label-hide')
+                    : getDataAttribute(button, 'data-password-toggle-label-show', 'data-label-show')
                 if (label) {
                     button.setAttribute('aria-label', label)
                     if (button.title) {

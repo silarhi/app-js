@@ -358,7 +358,15 @@ Listen on `document` for every collection, or on one collection element:
 Importing `@silarhi/app-js/form` types them in `HTMLElementEventMap` and `DocumentEventMap`, so
 `on(document, 'collection.added', (event) => event.detail.item)` needs no cast.
 
-Only remove buttons with a `data-confirm-message` ask for confirmation.
+Only remove buttons with a `data-collection-confirm-message` ask for confirmation, and an item added on the page only
+once one of its fields changed (see `hasChanged()` below): adding an item then removing it right away asks nothing. An
+item added with `values` differs from its prototype, so it asks. Removing an item the server rendered marks its
+`data-track-changes` form as `changed`. A remove button can remove another ancestor than its item with
+`data-collection-item=".selector"`.
+
+The former unscoped names (`data-index`, `data-confirm-message`, `data-item`, and `passwordToggle()`'s
+`data-label-show` / `data-label-hide`) are still read, with a deprecation warning in the console the first time each
+one is met, until the next major version.
 
 From a page, `collections.each(form.get('items'), ({ item, index, form }) => form.field('label').onChange(…))`
 runs for existing items and for every added one, with each item as a `FormView`, and returns its unsubscription.
@@ -370,9 +378,10 @@ an entity. The filling itself is `fillForm(node, values, addItem)`, exported for
 collections.add(form.get('phones'), { number: '0102', type: { id: 3 }, tags: ['work'] })
 ```
 
-The next index comes from `data-index` when the template renders it (Symfony's documented
-`data-index="{{ form|length > 0 ? form|last.vars.name + 1 : 0 }}"`), else from the highest index in the items' ids.
-It is then kept in `data-index`, so an index is never reused after a removal.
+The next index comes from `data-collection-index` when the template renders it (Symfony's documented
+`data-index`, scoped: `data-collection-index="{{ form|length > 0 ? form|last.vars.name + 1 : 0 }}"`), else from the
+highest index in the items' ids. It is then kept in `data-collection-index`, so an index is never reused after a
+removal.
 
 **Dependent fields.** `FormDefinition` shows, hides, requires, disables or empties fields depending on others:
 
@@ -398,6 +407,19 @@ shown again, it is required as its `.require()` rules say, else as Symfony rende
 group's value, multiple select → array). They only touch the native control: a widget that took it over is driven
 through its `bindField()` behavior. `radioGroup(radio)` returns the radios
 sharing its name within its form, as the browser groups them.
+
+**Changes.** `hasFieldChanged(field)` compares a control with the value the server rendered, which the browser keeps as
+`defaultValue` / `defaultChecked` / `defaultSelected`: nothing is recorded, the DOM holds the answer. `hasChanged(element)`
+reads a form's controls or the ones inside any element (a collection item). `hasUnsavedChanges()` reads the forms opted
+in with `data-track-changes`, for a leave-the-page guard:
+
+```twig
+{%- set attr = attr|merge({'data-track-changes': form.vars.submitted ? 'refused' : ''}) -%}
+```
+
+A non-empty `data-track-changes` is a change the fields cannot show: `refused` (a submitted form rendered back) or
+`changed`, set by `markFormChanged(element)` (an item removed). A widget rewriting a field when it starts declares the
+new starting value with `field.defaultValue = field.value`.
 
 **Errors.** A missing path or id throws a `FieldNotFoundError` (a `ReferenceError`) with its `path` and the closest
 existing names in `suggestions`, so an optional field can be told apart from a typo. A rule that cannot resolve its
@@ -484,7 +506,7 @@ new App({
 | `autoSubmit()` | `[data-autosubmit]` on a field (or a form) | `requestSubmit()` its form on `change` (or the `event` given) |
 | `submitOnce()` | `form[data-submit-once]` | disables its submit buttons while it submits, sets `aria-busy` |
 | `checkAll()` | `[data-check-all]` holding `[data-check-all-master]`, `[data-check-all-item]`, `[data-check-all-action]` | a master checks every item (indeterminate when some are); the actions show once one is checked |
-| `passwordToggle()` | `[data-password-toggle][aria-controls]`, `data-label-show` / `data-label-hide`, `[data-password-toggle-icon="show"/"hide"]` | shows / hides the password, hidden again on submit and on unmount |
+| `passwordToggle()` | `[data-password-toggle][aria-controls]`, `data-password-toggle-label-show` / `data-password-toggle-label-hide`, `[data-password-toggle-icon="show"/"hide"]` | shows / hides the password, hidden again on submit and on unmount |
 | `copyToClipboard()` | `[data-copy="text"]` or `[data-copy-target="#selector"]` | copies on click, then `onSuccess` / `onError` |
 | `webauthn()` | `form[data-webauthn-options]` (JSON), `data-webauthn-action="register"`, `[data-webauthn-response]`, `[data-webauthn-error]` | runs the passkey ceremony on submit, then submits its answer |
 

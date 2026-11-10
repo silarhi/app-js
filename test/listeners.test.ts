@@ -9,13 +9,16 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { byId } from '../src'
+import { resetDeprecations } from '../src/deprecation'
 import { autoSubmit, checkAll, copyToClipboard, passwordToggle, submitOnce, webauthn } from '../src/listeners'
 import { mountFixture, resetFixtures } from '../src/testing'
 
 afterEach(() => {
     resetFixtures()
+    resetDeprecations()
     vi.unstubAllGlobals()
     vi.useRealTimers()
+    vi.restoreAllMocks()
 })
 
 const input = (id: string) => byId(id, HTMLInputElement) as HTMLInputElement
@@ -174,7 +177,7 @@ describe('passwordToggle', () => {
     const PAGE =
         '<form id="login"><input id="password" type="password">' +
         '<button type="button" id="eye" data-password-toggle aria-controls="password" aria-pressed="false" ' +
-        'data-label-show="Show" data-label-hide="Hide" title="Show">' +
+        'data-password-toggle-label-show="Show" data-password-toggle-label-hide="Hide" title="Show">' +
         '<i id="show" data-password-toggle-icon="show"></i><i id="hide" class="hidden" data-password-toggle-icon="hide"></i>' +
         '</button></form>'
 
@@ -216,6 +219,21 @@ describe('passwordToggle', () => {
         button('eye').click()
 
         expect(input('password').type).toBe('text')
+    })
+
+    it('still reads the former label attributes, with a deprecation warning', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        mountFixture(PAGE.replaceAll('data-password-toggle-label-', 'data-label-'), { listeners: [passwordToggle()] })
+
+        button('eye').click()
+        expect(button('eye').getAttribute('aria-label')).toBe('Hide')
+        button('eye').click()
+        expect(button('eye').getAttribute('aria-label')).toBe('Show')
+
+        expect(warn.mock.calls).toEqual([
+            ['The "data-label-hide" attribute is deprecated, use "data-password-toggle-label-hide" instead.'],
+            ['The "data-label-show" attribute is deprecated, use "data-password-toggle-label-show" instead.'],
+        ])
     })
 })
 
