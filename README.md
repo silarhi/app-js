@@ -401,6 +401,19 @@ group's value, multiple select → array). They only touch the native control: a
 through its `bindField()` behavior. `radioGroup(radio)` returns the radios
 sharing its name within its form, as the browser groups them.
 
+**Changes.** `hasFieldChanged(field)` compares a control with the value the server rendered, which the browser keeps as
+`defaultValue` / `defaultChecked` / `defaultSelected`: nothing is recorded, the DOM holds the answer. `hasChanged(element)`
+reads a form's controls or the ones inside any element (a collection item). `hasUnsavedChanges()` reads the forms opted
+in with `data-track-changes`, for a leave-the-page guard:
+
+```twig
+{%- set attr = attr|merge({'data-track-changes': form.vars.submitted ? 'refused' : ''}) -%}
+```
+
+A non-empty `data-track-changes` is a change the fields cannot show: `refused` (a submitted form rendered back) or
+`changed`, set by `markFormChanged(element)` (an item removed). A widget rewriting a field when it starts declares the
+new starting value with `field.defaultValue = field.value`.
+
 **Errors.** A missing path or id throws a `FieldNotFoundError` (a `ReferenceError`) with its `path` and the closest
 existing names in `suggestions`, so an optional field can be told apart from a typo. A rule that cannot resolve its
 source or target throws a `FormRuleError` from `apply()`, with the 1-based `rule`, its `role` (`source`, `show`,

@@ -21,6 +21,7 @@ export type {
     ItemContext,
 } from './CollectionManager'
 export { COLLECTION_EVENTS, CollectionManager, DEFAULT_SELECTORS } from './CollectionManager'
+export { hasChanged, hasFieldChanged, hasUnsavedChanges, markFormChanged } from './changes'
 export type { CollectionButtonSelectors, CollectionManagerId } from './collectionListener'
 export { collectionListener, DEFAULT_BUTTON_SELECTORS } from './collectionListener'
 export { FieldNotFoundError, FormRuleError } from './errors'
