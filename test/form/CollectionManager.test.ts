@@ -35,7 +35,7 @@ const manager = (options: Partial<CollectionOptions> = {}): CollectionManager =>
     new CollectionManager({ app: new App(), ...options })
 
 const ITEM = (name: string): string =>
-    `<div class="collection-item"><input id="tasks_${name}_label" name="tasks[${name}][label]" class="form-control"><button class="remove-collection" data-confirm-message="Sure?"></button></div>`
+    `<div class="collection-item"><input id="tasks_${name}_label" name="tasks[${name}][label]" class="form-control"><button class="remove-collection" data-collection-confirm-message="Sure?"></button></div>`
 
 beforeEach(() => {
     document.body.innerHTML = `
@@ -67,8 +67,8 @@ describe('add', () => {
 
         expect(order).toEqual(['add 1', 'mount tasks_1_label', 'added'])
         expect(item).toBe($('#tasks').lastElementChild)
-        expect(item.dataset.collectionIndex).toBe('1')
-        expect($('#tasks').dataset.index).toBe('2')
+        expect(item.dataset.collectionItemIndex).toBe('1')
+        expect($('#tasks').dataset.collectionIndex).toBe('2')
     })
 
     it('adds to the collection in the wrapper of a button', () => {
@@ -125,8 +125,8 @@ describe('next index', () => {
         expect(input(manager().add('tasks')).id).toBe('tasks_0_label')
     })
 
-    it('prefers a data-index rendered by the template', () => {
-        $('#tasks').dataset.index = '9'
+    it('prefers a data-collection-index rendered by the template', () => {
+        $('#tasks').dataset.collectionIndex = '9'
 
         expect(input(manager().add('tasks')).id).toBe('tasks_9_label')
     })
@@ -271,10 +271,10 @@ describe('remove', () => {
         expect(confirm).not.toHaveBeenCalled()
     })
 
-    it('removes the ancestor named by data-item', async () => {
+    it('removes the ancestor named by data-collection-item', async () => {
         $('#tasks').insertAdjacentHTML(
             'beforeend',
-            '<section class="card"><input id="tasks_1_label" name="tasks[1][label]"><button data-item=".card"></button></section>'
+            '<section class="card"><input id="tasks_1_label" name="tasks[1][label]"><button data-collection-item=".card"></button></section>'
         )
 
         expect(await manager().remove($('.card button'))).toBe(true)

@@ -358,7 +358,8 @@ Listen on `document` for every collection, or on one collection element:
 Importing `@silarhi/app-js/form` types them in `HTMLElementEventMap` and `DocumentEventMap`, so
 `on(document, 'collection.added', (event) => event.detail.item)` needs no cast.
 
-Only remove buttons with a `data-confirm-message` ask for confirmation.
+Only remove buttons with a `data-collection-confirm-message` ask for confirmation. A remove button can remove another
+ancestor than its item with `data-collection-item=".selector"`.
 
 From a page, `collections.each(form.get('items'), ({ item, index, form }) => form.field('label').onChange(…))`
 runs for existing items and for every added one, with each item as a `FormView`, and returns its unsubscription.
@@ -370,9 +371,10 @@ an entity. The filling itself is `fillForm(node, values, addItem)`, exported for
 collections.add(form.get('phones'), { number: '0102', type: { id: 3 }, tags: ['work'] })
 ```
 
-The next index comes from `data-index` when the template renders it (Symfony's documented
-`data-index="{{ form|length > 0 ? form|last.vars.name + 1 : 0 }}"`), else from the highest index in the items' ids.
-It is then kept in `data-index`, so an index is never reused after a removal.
+The next index comes from `data-collection-index` when the template renders it (Symfony's documented
+`data-index`, scoped: `data-collection-index="{{ form|length > 0 ? form|last.vars.name + 1 : 0 }}"`), else from the
+highest index in the items' ids. It is then kept in `data-collection-index`, so an index is never reused after a
+removal.
 
 **Dependent fields.** `FormDefinition` shows, hides, requires, disables or empties fields depending on others:
 
@@ -484,7 +486,7 @@ new App({
 | `autoSubmit()` | `[data-autosubmit]` on a field (or a form) | `requestSubmit()` its form on `change` (or the `event` given) |
 | `submitOnce()` | `form[data-submit-once]` | disables its submit buttons while it submits, sets `aria-busy` |
 | `checkAll()` | `[data-check-all]` holding `[data-check-all-master]`, `[data-check-all-item]`, `[data-check-all-action]` | a master checks every item (indeterminate when some are); the actions show once one is checked |
-| `passwordToggle()` | `[data-password-toggle][aria-controls]`, `data-label-show` / `data-label-hide`, `[data-password-toggle-icon="show"/"hide"]` | shows / hides the password, hidden again on submit and on unmount |
+| `passwordToggle()` | `[data-password-toggle][aria-controls]`, `data-password-toggle-label-show` / `data-password-toggle-label-hide`, `[data-password-toggle-icon="show"/"hide"]` | shows / hides the password, hidden again on submit and on unmount |
 | `copyToClipboard()` | `[data-copy="text"]` or `[data-copy-target="#selector"]` | copies on click, then `onSuccess` / `onError` |
 | `webauthn()` | `form[data-webauthn-options]` (JSON), `data-webauthn-action="register"`, `[data-webauthn-response]`, `[data-webauthn-error]` | runs the passkey ceremony on submit, then submits its answer |
 

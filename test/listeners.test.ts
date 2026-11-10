@@ -174,7 +174,7 @@ describe('passwordToggle', () => {
     const PAGE =
         '<form id="login"><input id="password" type="password">' +
         '<button type="button" id="eye" data-password-toggle aria-controls="password" aria-pressed="false" ' +
-        'data-label-show="Show" data-label-hide="Hide" title="Show">' +
+        'data-password-toggle-label-show="Show" data-password-toggle-label-hide="Hide" title="Show">' +
         '<i id="show" data-password-toggle-icon="show"></i><i id="hide" class="hidden" data-password-toggle-icon="hide"></i>' +
         '</button></form>'
 
