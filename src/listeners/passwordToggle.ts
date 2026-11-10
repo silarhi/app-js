@@ -8,6 +8,7 @@
  */
 
 import { toggle } from '../css'
+import { getDataAttribute } from '../deprecation'
 import { byId, findAll, on } from '../dom'
 import type { Listener } from '../types'
 
@@ -47,7 +48,9 @@ export function passwordToggle({
                 input.type = shown ? 'text' : 'password'
                 button.setAttribute('aria-pressed', String(shown))
 
-                const label = shown ? button.dataset.passwordToggleLabelHide : button.dataset.passwordToggleLabelShow
+                const label = shown
+                    ? getDataAttribute(button, 'data-password-toggle-label-hide', 'data-label-hide')
+                    : getDataAttribute(button, 'data-password-toggle-label-show', 'data-label-show')
                 if (label) {
                     button.setAttribute('aria-label', label)
                     if (button.title) {

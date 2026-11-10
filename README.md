@@ -364,6 +364,10 @@ item added with `values` differs from its prototype, so it asks. Removing an ite
 `data-track-changes` form as `changed`. A remove button can remove another ancestor than its item with
 `data-collection-item=".selector"`.
 
+The former unscoped names (`data-index`, `data-confirm-message`, `data-item`, and `passwordToggle()`'s
+`data-label-show` / `data-label-hide`) are still read, with a deprecation warning in the console the first time each
+one is met, until the next major version.
+
 From a page, `collections.each(form.get('items'), ({ item, index, form }) => form.field('label').onChange(…))`
 runs for existing items and for every added one, with each item as a `FormView`, and returns its unsubscription.
 A collection can be given as its `FormView`, its element or its id. `add(collection, values)` adds an item already

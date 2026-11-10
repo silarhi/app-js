@@ -9,6 +9,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, escapeHtml, type Listener } from '../../src'
+import { resetDeprecations } from '../../src/deprecation'
 import {
     COLLECTION_EVENTS,
     CollectionManager,
@@ -48,6 +49,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+    resetDeprecations()
     vi.restoreAllMocks()
 })
 
@@ -355,6 +357,43 @@ describe('remove', () => {
 
         expect(await collections.remove($('.add-collection'))).toBe(false)
         expect(await collections.remove(stray)).toBe(false)
+    })
+})
+
+describe('former attributes', () => {
+    const deprecated = (legacy: string, attribute: string): string =>
+        `The "${legacy}" attribute is deprecated, use "${attribute}" instead.`
+
+    it('still reads data-index, data-confirm-message and data-item, warning once each', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        const confirm = vi.fn(() => true)
+        const collections = manager({ confirm })
+        $('#tasks').dataset.index = '7'
+        $('#tasks').insertAdjacentHTML(
+            'beforeend',
+            '<section class="card"><input id="tasks_5_label" name="tasks[5][label]"><button data-item=".card" data-confirm-message="Sure?"></button></section>'
+        )
+
+        expect(input(collections.add('tasks')).id).toBe('tasks_7_label')
+        expect(input(collections.add('tasks')).id).toBe('tasks_8_label')
+        expect(await collections.remove($('.card button'))).toBe(true)
+        expect(confirm).toHaveBeenCalledWith('Sure?', expect.anything())
+        expect($('.card')).toBeNull()
+
+        expect(warn.mock.calls).toEqual([
+            [deprecated('data-index', 'data-collection-index')],
+            [deprecated('data-item', 'data-collection-item')],
+            [deprecated('data-confirm-message', 'data-collection-confirm-message')],
+        ])
+    })
+
+    it('prefers the new attribute without warning', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        $('#tasks').dataset.index = '7'
+        $('#tasks').dataset.collectionIndex = '3'
+
+        expect(input(manager().add('tasks')).id).toBe('tasks_3_label')
+        expect(warn).not.toHaveBeenCalled()
     })
 })
 

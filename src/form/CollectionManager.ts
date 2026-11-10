@@ -8,6 +8,7 @@
  */
 
 import type { App } from '../App'
+import { getDataAttribute } from '../deprecation'
 import { appendHTML, byId, on, trigger } from '../dom'
 import type { Cleanup } from '../types'
 import { hasChanged, markFormChanged } from './changes'
@@ -157,7 +158,9 @@ export class CollectionManager {
      * Resolves to whether it was removed.
      */
     async remove(target: HTMLElement, { confirm = true }: { confirm?: boolean } = {}): Promise<boolean> {
-        const item = target.closest<HTMLElement>(target.dataset.collectionItem || this.selectors.item)
+        const item = target.closest<HTMLElement>(
+            getDataAttribute(target, 'data-collection-item', 'data-item') || this.selectors.item
+        )
         const collection = item?.parentElement?.closest<HTMLElement>(this.selectors.collection)
         if (!item || !collection) {
             return false
@@ -228,7 +231,7 @@ export class CollectionManager {
      * nothing typed in it is lost.
      */
     async #confirmRemoval(target: HTMLElement, detail: CollectionItemDetail): Promise<boolean> {
-        const message = target.dataset.collectionConfirmMessage
+        const message = getDataAttribute(target, 'data-collection-confirm-message', 'data-confirm-message')
         if (message === undefined || (this.#added.has(detail.item) && !hasChanged(detail.item))) {
             return true
         }
@@ -272,7 +275,7 @@ export class CollectionManager {
      * or a submitted form re-rendered with its original keys.
      */
     #nextIndex(collection: HTMLElement, view: FormView): number {
-        const stored = Number.parseInt(collection.dataset.collectionIndex ?? '', 10)
+        const stored = Number.parseInt(getDataAttribute(collection, 'data-collection-index', 'data-index') ?? '', 10)
         if (!Number.isNaN(stored)) {
             return stored
         }
