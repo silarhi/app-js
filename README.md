@@ -358,8 +358,11 @@ Listen on `document` for every collection, or on one collection element:
 Importing `@silarhi/app-js/form` types them in `HTMLElementEventMap` and `DocumentEventMap`, so
 `on(document, 'collection.added', (event) => event.detail.item)` needs no cast.
 
-Only remove buttons with a `data-collection-confirm-message` ask for confirmation. A remove button can remove another
-ancestor than its item with `data-collection-item=".selector"`.
+Only remove buttons with a `data-collection-confirm-message` ask for confirmation, and an item added on the page only
+once one of its fields changed (see `hasChanged()` below): adding an item then removing it right away asks nothing. An
+item added with `values` differs from its prototype, so it asks. Removing an item the server rendered marks its
+`data-track-changes` form as `changed`. A remove button can remove another ancestor than its item with
+`data-collection-item=".selector"`.
 
 From a page, `collections.each(form.get('items'), ({ item, index, form }) => form.field('label').onChange(…))`
 runs for existing items and for every added one, with each item as a `FormView`, and returns its unsubscription.

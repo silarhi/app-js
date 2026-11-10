@@ -243,20 +243,86 @@ describe('remove', () => {
 
     it('asks through window.confirm by default, only for buttons with a message', async () => {
         const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+        $('#tasks').insertAdjacentHTML('beforeend', ITEM('1'))
         const collections = manager()
-        const added = collections.add('tasks')
 
-        expect(await collections.remove(input(added, 'button'))).toBe(false)
+        expect(await collections.remove(input(collections.items('tasks')[1], 'button'))).toBe(false)
         expect(confirm).toHaveBeenCalledWith('Sure?')
 
         expect(await collections.remove($('.remove-collection'))).toBe(true)
         expect(confirm).toHaveBeenCalledOnce()
     })
 
+    it('removes an added item left untouched without asking', async () => {
+        const confirm = vi.fn(() => false)
+        const collections = manager({ confirm })
+        const added = collections.add('tasks')
+
+        expect(await collections.remove(input(added, 'button'))).toBe(true)
+        expect(confirm).not.toHaveBeenCalled()
+    })
+
+    it('asks for an added item while one of its fields differs from the prototype', async () => {
+        const confirm = vi.fn(() => false)
+        const collections = manager({ confirm })
+        const added = collections.add('tasks')
+
+        input(added).value = 'Ship'
+        expect(await collections.remove(input(added, 'button'))).toBe(false)
+        expect(confirm).toHaveBeenCalledOnce()
+
+        input(added).value = ''
+        expect(await collections.remove(input(added, 'button'))).toBe(true)
+        expect(confirm).toHaveBeenCalledOnce()
+    })
+
+    it('asks for an item added with values', async () => {
+        const confirm = vi.fn(() => false)
+        const collections = manager({ confirm })
+        const added = collections.add('tasks', { label: 'Ship' })
+
+        expect(await collections.remove(input(added, 'button'))).toBe(false)
+        expect(confirm).toHaveBeenCalledOnce()
+    })
+
+    it('takes the starting value a mounted widget declares', async () => {
+        const confirm = vi.fn(() => false)
+        const app = new App({
+            listeners: [
+                {
+                    selector: '.form-control',
+                    connect: (field) => {
+                        const control = field as HTMLInputElement
+                        control.value = 'normalized'
+                        control.defaultValue = control.value
+                    },
+                },
+            ],
+        })
+        const collections = new CollectionManager({ app, confirm })
+        const added = collections.add('tasks')
+
+        expect(await collections.remove(input(added, 'button'))).toBe(true)
+        expect(confirm).not.toHaveBeenCalled()
+    })
+
+    it('marks the tracked form changed when a rendered item goes, not an added one', async () => {
+        document.body.innerHTML = `<form data-track-changes="">${document.body.innerHTML}</form>`
+        const form = $<HTMLFormElement>('form')
+        const collections = manager()
+
+        await collections.remove(collections.add('tasks'))
+        expect(form.dataset.trackChanges).toBe('')
+
+        await collections.remove(collections.items('tasks')[0])
+        expect(form.dataset.trackChanges).toBe('changed')
+    })
+
     it('asks through the confirm option when given', async () => {
         const confirm = vi.fn(async () => true)
         const collections = manager({ confirm })
         const added = collections.add('tasks')
+        input(added).value = 'Ship'
 
         expect(await collections.remove(input(added, 'button'))).toBe(true)
         expect(confirm).toHaveBeenCalledWith('Sure?', expect.objectContaining({ item: added, index: 1 }))
@@ -444,8 +510,10 @@ describe('collectionListener', () => {
             },
         })
         $('.add-collection').click()
+        const added = collections().items('tasks')[1]
+        input(added).value = 'Ship'
 
-        input(collections().items('tasks')[1], 'button').click()
+        input(added, 'button').click()
 
         await vi.waitFor(() =>
             expect(error).toHaveBeenCalledWith('Failed to remove collection item', expect.any(Error))

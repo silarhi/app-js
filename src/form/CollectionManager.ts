@@ -10,6 +10,7 @@
 import type { App } from '../App'
 import { appendHTML, byId, on, trigger } from '../dom'
 import type { Cleanup } from '../types'
+import { hasChanged, markFormChanged } from './changes'
 import { FormView } from './FormView'
 import { fillForm } from './fillForm'
 
@@ -68,7 +69,8 @@ declare global {
 /**
  * Asks before a removal: plug the app's dialog (SweetAlert, a Bootstrap
  * modal…) here. `message` is the remove button's
- * `data-collection-confirm-message`; buttons without one remove right away.
+ * `data-collection-confirm-message`; buttons without one remove right away,
+ * as do items added on the page whose fields are still the prototype's.
  */
 export type ConfirmHandler = (message: string, detail: CollectionItemDetail) => boolean | Promise<boolean>
 
@@ -108,6 +110,8 @@ export class CollectionManager {
     readonly selectors: CollectionSelectors
     readonly #options: CollectionOptions
     readonly #app: App
+    /** The items added on the page: removing one untouched loses nothing. */
+    readonly #added = new WeakSet<HTMLElement>()
 
     constructor(options: CollectionOptions) {
         this.#options = options
@@ -127,6 +131,7 @@ export class CollectionManager {
         const item = this.#append(element, view, values)
         const detail = this.#detail(element, item, view)
 
+        this.#added.add(item)
         trigger(element, COLLECTION_EVENTS.add, detail)
         this.#app.mount(item)
         trigger(element, COLLECTION_EVENTS.added, detail)
@@ -168,6 +173,10 @@ export class CollectionManager {
 
         this.#app.unmount(item)
         item.remove()
+        if (!this.#added.has(item)) {
+            // The form loses what the server rendered: no field is left to show it
+            markFormChanged(collection)
+        }
         trigger(collection, COLLECTION_EVENTS.removed, detail)
 
         return true
@@ -214,11 +223,13 @@ export class CollectionManager {
 
     /**
      * Ask only when the remove button carries `data-collection-confirm-message`,
-     * through the `confirm` option or `window.confirm`.
+     * through the `confirm` option or `window.confirm`. An item added on the
+     * page goes without asking while its fields hold their default values:
+     * nothing typed in it is lost.
      */
     async #confirmRemoval(target: HTMLElement, detail: CollectionItemDetail): Promise<boolean> {
         const message = target.dataset.collectionConfirmMessage
-        if (message === undefined) {
+        if (message === undefined || (this.#added.has(detail.item) && !hasChanged(detail.item))) {
             return true
         }
 
