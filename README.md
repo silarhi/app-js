@@ -246,6 +246,30 @@ Symfony builds every id and name from the path (`user_address_city`, `user[addre
 back from ids, where `_` in field names would be ambiguous, and nothing is cached: items added later are found
 right away. A node only navigates; `field(path)` returns its `Field`, one per node, following the DOM too.
 
+**Typed paths.** Given the shape of the form, paths are checked when compiling:
+
+```ts
+import { type FormCollection, type FormField, formView } from '@silarhi/app-js/form'
+
+interface PartyForm {
+    name: FormField // a control, a radio group, an expanded choice
+    address: { city: FormField } // an embedded form
+    phones: FormCollection<{ number: FormField }> // a collection: `phones.2.number`
+    siren?: FormField // not always rendered (it depends on the form's options or data)
+}
+
+const form = formView<PartyForm>(id)
+form.get('address.city')
+form.get('phones').get('2.number') // return types follow the path
+form.find('siren')?.field().setValue('') // FormView | null
+form.get('adress.city') // TS2345: '"adress.city"' is not assignable to '"address" | "address.city" | …'
+form.get('siren') // error: not always rendered, so it goes through find()
+```
+
+`get()` and `field()` take the paths that are always rendered, `find()` and `has()` any path. A typed form makes a
+`FormDefinition` check its targets too. Without a shape, `formView()` takes any string, as before. The shape is a type
+only: the DOM stays the source, and a wrong shape still fails at runtime with a `FieldNotFoundError`.
+
 **Fields.** `Field` is what a page does with a field, with or without a form view:
 
 ```js
@@ -395,7 +419,8 @@ export default function party({ form: id }) {
 }
 ```
 
-With `form`, string targets are paths; without, element ids. Targets can also be elements, `Field`s, `FormView`s, or
+With `form`, string targets are paths (checked, for a typed form: a field not always rendered is passed as
+`form.find()`'s node, once tested); without, element ids. Targets can also be elements, `Field`s, `FormView`s, or
 `block(target)` to toggle the element itself instead of its `.form-group`. A mistyped path fails at `apply()` with
 the rule it belongs to: `Cannot resolve the "show" target of rule #2: No field "sirne" in "party"…`.
 

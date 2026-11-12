@@ -10,18 +10,19 @@
 import { ActionBuilder } from './ActionBuilder'
 import type { FormDefinition } from './FormDefinition'
 import type { FieldTarget, Rule } from './rules'
+import type { AnyShape } from './shape'
 import type { FieldValue, FormControl } from './values'
 
 /**
  * The condition half of a rule: `definition.when('type').equals('flat')`.
  * Each predicate hands over to an {@link ActionBuilder} for the effects.
  */
-export class WhenBuilder {
-    readonly #definition: FormDefinition
-    readonly #field: FieldTarget
+export class WhenBuilder<S = AnyShape> {
+    readonly #definition: FormDefinition<S>
+    readonly #field: FieldTarget<S>
     #extractor: Rule['extractor'] = null
 
-    constructor(definition: FormDefinition, field: FieldTarget) {
+    constructor(definition: FormDefinition<S>, field: FieldTarget<S>) {
         this.#definition = definition
         this.#field = field
     }
@@ -33,36 +34,36 @@ export class WhenBuilder {
     }
 
     /** Strict comparison with any of `values`. */
-    equals(...values: FieldValue[]): ActionBuilder {
+    equals(...values: FieldValue[]): ActionBuilder<S> {
         return this.#predicate((value) => values.includes(value))
     }
 
-    notEquals(...values: FieldValue[]): ActionBuilder {
+    notEquals(...values: FieldValue[]): ActionBuilder<S> {
         return this.#predicate((value) => !values.includes(value))
     }
 
     /** For array values: checkbox groups, multiple selects. */
-    includes(value: string): ActionBuilder {
+    includes(value: string): ActionBuilder<S> {
         return this.#predicate((current) => Array.isArray(current) && current.includes(value))
     }
 
-    notIncludes(value: string): ActionBuilder {
+    notIncludes(value: string): ActionBuilder<S> {
         return this.#predicate((current) => !Array.isArray(current) || !current.includes(value))
     }
 
-    isTruthy(): ActionBuilder {
+    isTruthy(): ActionBuilder<S> {
         return this.#predicate((value) => Boolean(value))
     }
 
-    isFalsy(): ActionBuilder {
+    isFalsy(): ActionBuilder<S> {
         return this.#predicate((value) => !value)
     }
 
-    isChecked(): ActionBuilder {
+    isChecked(): ActionBuilder<S> {
         return this.equals(true)
     }
 
-    #predicate(test: Rule['test']): ActionBuilder {
-        return new ActionBuilder(this.#definition, { field: this.#field, extractor: this.#extractor, test })
+    #predicate(test: Rule['test']): ActionBuilder<S> {
+        return new ActionBuilder<S>(this.#definition, { field: this.#field, extractor: this.#extractor, test })
     }
 }

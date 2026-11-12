@@ -11,6 +11,7 @@ import { byId } from '../dom'
 import { closest, hint } from '../suggest'
 import { FieldNotFoundError } from './errors'
 import { Field, type FieldOptions } from './Field'
+import type { AnyShape, FormChild, FormNodeAt, FormPath, RequiredFormPath } from './shape'
 import { type FormControl, isControl, radioGroup } from './values'
 
 export interface FormViewOptions {
@@ -32,8 +33,12 @@ export interface FormViewOptions {
  * into a path, which `_` in field names would make ambiguous. Nothing is
  * cached but the nodes themselves: items added by `CollectionManager` or a
  * Turbo Stream are found right away.
+ *
+ * Given a shape (`formView<UserForm>()`, see `shape.ts`), paths are checked
+ * when compiling: `get()` takes the paths always rendered, `find()` and
+ * `has()` any path. Without one, every string is a path.
  */
-export class FormView {
+export class FormView<S = AnyShape> {
     readonly id: string
     /** The name attribute prefix: `user[address]`. */
     readonly fullName: string
@@ -64,9 +69,9 @@ export class FormView {
      * A node from an element: a control, or a container whose name prefix is
      * read from its prototype or its first field.
      */
-    static fromElement(element: Element, options: FormViewOptions = {}): FormView {
+    static fromElement<S = AnyShape>(element: Element, options: FormViewOptions = {}): FormView<S> {
         const fullName = isControl(element) ? element.name.replace(/\[\]$/, '') : containerName(element)
-        const view = new FormView(element.id, fullName, options)
+        const view = new FormView<S>(element.id, fullName, options)
         view.#anchor = element as HTMLElement
 
         return view
@@ -88,7 +93,19 @@ export class FormView {
      * The node at `path`, below this one. Throws on a missing field, with the
      * closest existing names.
      */
-    get(path: string): FormView {
+    get<P extends RequiredFormPath<S>>(path: P): FormView<FormNodeAt<S, P>> {
+        return this.#get(path)
+    }
+
+    /**
+     * The node at `path`, or null when it is not rendered: a field that
+     * depends on the form's options or data.
+     */
+    find<P extends FormPath<S>>(path: P): FormView<FormNodeAt<S, P>> | null {
+        return this.has(path) ? this.#get(path) : null
+    }
+
+    #get(path: string): FormView {
         let node: FormView = this
         for (const segment of path.split('.').filter(Boolean)) {
             const child = node.#child(segment)
@@ -109,7 +126,7 @@ export class FormView {
         return node
     }
 
-    has(path: string): boolean {
+    has(path: FormPath<S>): boolean {
         let node: FormView = this
         for (const segment of path.split('.').filter(Boolean)) {
             node = node.#child(segment)
@@ -125,7 +142,7 @@ export class FormView {
      * The rendered children, in document order: fields of a form, items of a
      * collection, options of an expanded choice.
      */
-    get children(): FormView[] {
+    get children(): FormView<FormChild<S>>[] {
         const names = new Set<string>()
         for (const control of this.#scope().querySelectorAll(this.#namedBelow())) {
             const segment = this.#segmentOf(control)
@@ -148,7 +165,7 @@ export class FormView {
      * The direct child holding `element`, or being it, read from the name of
      * a control inside: which item of a collection a row is.
      */
-    childOf(element: Element): FormView | null {
+    childOf(element: Element): FormView<FormChild<S>> | null {
         const selector = this.#namedBelow()
         const control = element.matches(selector) ? element : element.querySelector(selector)
         const segment = control ? this.#segmentOf(control) : ''
@@ -173,8 +190,8 @@ export class FormView {
      * The {@link Field} at `path` (this node by default): value, required,
      * disabled, visibility. It follows the DOM like the node does.
      */
-    field(path = ''): Field {
-        const node = this.get(path)
+    field(path: RequiredFormPath<S> | '' = ''): Field {
+        const node = this.#get(path)
         node.#field ??= new Field({ element: () => node.element, inputs: () => node.inputs }, node.#options.field)
 
         return node.#field
@@ -236,17 +253,17 @@ export class FormView {
  * The root of a rendered form: a `<form>` element, any container, or the
  * form's id (Symfony names a root form after its id: `user`).
  */
-export function formView(root: string | Element, options: FormViewOptions = {}): FormView {
+export function formView<S = AnyShape>(root: string | Element, options: FormViewOptions = {}): FormView<S> {
     if (typeof root === 'string') {
-        return new FormView(root, root, options)
+        return new FormView<S>(root, root, options)
     }
 
     if (root instanceof HTMLFormElement) {
         const name = root.getAttribute('name') ?? ''
-        return new FormView(name, name, { root, ...options })
+        return new FormView<S>(name, name, { root, ...options })
     }
 
-    return FormView.fromElement(root, options)
+    return FormView.fromElement<S>(root, options)
 }
 
 /**
