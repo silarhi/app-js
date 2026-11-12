@@ -9,23 +9,26 @@
 
 import type { Field } from './Field'
 import type { FormView } from './FormView'
+import type { AnyShape, RequiredFormPath } from './shape'
 import type { FieldValue, FormControl } from './values'
 
 /**
  * What a rule points at: a path of the definition's `form` (`address.city`),
  * or an element id without one; an element, a {@link Field}, a
- * {@link FormView} node, or a {@link block} wrapper.
+ * {@link FormView} node, or a {@link block} wrapper. With a typed `form`,
+ * only the paths it always renders: a field that may be missing goes
+ * through `form.find()`.
  */
-export type FieldTarget = string | Element | Field | FormView | BlockTarget
+export type FieldTarget<S = AnyShape> = RequiredFormPath<S> | Element | Field | FormView | BlockTarget<S>
 
-export interface BlockTarget {
-    block: Exclude<FieldTarget, BlockTarget>
+export interface BlockTarget<S = AnyShape> {
+    block: Exclude<FieldTarget<S>, BlockTarget<S>>
 }
 
 /**
  * Show/hide the element itself instead of its form group ancestor.
  */
-export const block = (target: Exclude<FieldTarget, BlockTarget>): FieldTarget => ({ block: target })
+export const block = <const T extends Exclude<FieldTarget, BlockTarget>>(target: T): { block: T } => ({ block: target })
 
 export const isBlock = (target: FieldTarget): target is BlockTarget =>
     typeof target === 'object' && target !== null && 'block' in target

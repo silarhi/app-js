@@ -13,15 +13,16 @@ import { FieldNotFoundError, FormRuleError } from './errors'
 import { Field, type FieldOptions } from './Field'
 import { FormView } from './FormView'
 import { type Effect, type FieldTarget, isBlock, type Rule } from './rules'
+import type { AnyShape } from './shape'
 import { WhenBuilder } from './WhenBuilder'
 
 const MAX_PASSES = 10
 
 type Buckets = Record<Effect, Array<() => boolean>>
 
-export interface FormDefinitionOptions {
-    /** Resolves string targets as paths of this form instead of element ids. */
-    form?: FormView
+export interface FormDefinitionOptions<S = AnyShape> {
+    /** Resolves string targets as paths of this form instead of element ids; typed, it checks them. */
+    form?: FormView<S>
     /** Where ids are looked up without a `form`. */
     root?: ParentNode
     /** Handed to the fields built from ids or elements; a `form` hands its own. */
@@ -45,12 +46,12 @@ export interface FormDefinitionOptions {
  * - A hidden target is never required; shown, it is required as its
  *   `.require()` rules say, else as it was rendered.
  */
-export class FormDefinition {
+export class FormDefinition<S = AnyShape> {
     readonly #rules: Rule[] = []
     readonly #fields = new WeakMap<Element, Field>()
-    readonly #options: FormDefinitionOptions
+    readonly #options: FormDefinitionOptions<S>
 
-    constructor(options: FormDefinitionOptions = {}) {
+    constructor(options: FormDefinitionOptions<S> = {}) {
         this.#options = options
     }
 
@@ -59,8 +60,8 @@ export class FormDefinition {
         return this.#rules
     }
 
-    when(field: FieldTarget): WhenBuilder {
-        return new WhenBuilder(this, field)
+    when(field: FieldTarget<S>): WhenBuilder<S> {
+        return new WhenBuilder<S>(this, field)
     }
 
     /** Declare a rule directly; `when()` builds them for you. */
@@ -186,7 +187,7 @@ export class FormDefinition {
             throw new Error('No form field given (a mistyped path or property?).')
         }
         if (typeof target === 'string' && this.#options.form) {
-            return this.#options.form.field(target)
+            return (this.#options.form as FormView).field(target)
         }
 
         const element = typeof target === 'string' ? this.#byId(target) : target

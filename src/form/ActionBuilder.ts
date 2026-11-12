@@ -10,6 +10,7 @@
 import type { Cleanup } from '../types'
 import type { FormDefinition } from './FormDefinition'
 import type { Effect, FieldTarget, Rule } from './rules'
+import type { AnyShape } from './shape'
 import type { WhenBuilder } from './WhenBuilder'
 
 /**
@@ -17,41 +18,41 @@ import type { WhenBuilder } from './WhenBuilder'
  * chain on the same condition; `when()` starts the next rule and `apply()`
  * applies them all.
  */
-export class ActionBuilder {
-    readonly #definition: FormDefinition
+export class ActionBuilder<S = AnyShape> {
+    readonly #definition: FormDefinition<S>
     readonly #predicate: Pick<Rule, 'field' | 'extractor' | 'test'>
 
-    constructor(definition: FormDefinition, predicate: Pick<Rule, 'field' | 'extractor' | 'test'>) {
+    constructor(definition: FormDefinition<S>, predicate: Pick<Rule, 'field' | 'extractor' | 'test'>) {
         this.#definition = definition
         this.#predicate = predicate
     }
 
-    show(...targets: FieldTarget[]): this {
+    show(...targets: FieldTarget<S>[]): this {
         return this.#add('show', targets)
     }
 
-    hide(...targets: FieldTarget[]): this {
+    hide(...targets: FieldTarget<S>[]): this {
         return this.#add('hide', targets)
     }
 
-    require(...targets: FieldTarget[]): this {
+    require(...targets: FieldTarget<S>[]): this {
         return this.#add('require', targets)
     }
 
-    disable(...targets: FieldTarget[]): this {
+    disable(...targets: FieldTarget<S>[]): this {
         return this.#add('disable', targets)
     }
 
     /** Clear the targets while the condition holds. */
-    empty(...targets: FieldTarget[]): this {
+    empty(...targets: FieldTarget<S>[]): this {
         return this.#add('empty', targets)
     }
 
-    showAndRequire(...targets: FieldTarget[]): this {
+    showAndRequire(...targets: FieldTarget<S>[]): this {
         return this.#add('show', targets).#add('require', targets)
     }
 
-    when(field: FieldTarget): WhenBuilder {
+    when(field: FieldTarget<S>): WhenBuilder<S> {
         return this.#definition.when(field)
     }
 
@@ -59,7 +60,7 @@ export class ActionBuilder {
         return this.#definition.apply()
     }
 
-    #add(effect: Effect, targets: FieldTarget[]): this {
+    #add(effect: Effect, targets: FieldTarget<S>[]): this {
         for (const target of targets) {
             this.#definition.addRule({ ...this.#predicate, effect, target })
         }
