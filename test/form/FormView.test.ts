@@ -144,6 +144,39 @@ describe('navigation', () => {
         expect(FormView.fromElement(document.createElement('div')).fullName).toBe('')
     })
 
+    it('roots on any element, as the node its fields share', () => {
+        document.body.innerHTML = `
+            <div class="amount-part" id="rent_debits_0_amountPart_group">
+                <input id="rent_debits_0_amountPart_amount" name="rent[debits][0][amountPart][amount]" value="12">
+                <select id="rent_debits_0_amountPart_taxType" name="rent[debits][0][amountPart][taxType]">
+                    <option value="">-</option><option value="tax_included" selected>TTC</option>
+                </select>
+                <div class="ts-control"><input id="rent_debits_0_amountPart_taxType-ts-control"></div>
+                <input type="checkbox" id="rent_debits_0_amountPart_customTaxAmount" name="rent[debits][0][amountPart][customTaxAmount]" value="1">
+            </div>`
+        const part = formView($('.amount-part'))
+
+        expect([part.fullName, part.id, part.path]).toEqual([
+            'rent[debits][0][amountPart]',
+            'rent_debits_0_amountPart',
+            '',
+        ])
+        expect(part.element).toBe($('.amount-part'))
+        expect(part.children.map((child) => child.name)).toEqual(['amount', 'taxType', 'customTaxAmount'])
+        expect(part.field('amount').value).toBe('12')
+        expect(part.field('taxType').value).toBe('tax_included')
+        expect(part.field('customTaxAmount').value).toBe(false)
+    })
+
+    it('scopes lookups to the element it roots on', () => {
+        document.body.innerHTML = `
+            <div id="user"><input id="user_name" name="user[name]" value="page"></div>
+            <section class="modal"><div><input id="user_name" name="user[name]" value="modal"></div></section>`
+
+        expect(formView($('.modal')).field('name').value).toBe('modal')
+        expect(formView($('.modal > div')).field('name').value).toBe('modal')
+    })
+
     it('supports unnamed root forms', () => {
         document.body.innerHTML =
             '<form><input id="city" name="city"><input id="phones_0_n" name="phones[0][n]"></form>'

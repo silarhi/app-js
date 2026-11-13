@@ -67,11 +67,16 @@ export class FormView<S = AnyShape> {
 
     /**
      * A node from an element: a control, or a container whose name prefix is
-     * read from its prototype or its first field.
+     * read from its prototype, its fields' ids, or the names its fields share.
+     * A container's id follows its name, as Symfony builds it: a wrapper with
+     * an id of its own (`rent_debits_0_amountPart_group`) still finds
+     * `rent_debits_0_amountPart_amount`.
      */
     static fromElement<S = AnyShape>(element: Element, options: FormViewOptions = {}): FormView<S> {
-        const fullName = isControl(element) ? element.name.replace(/\[\]$/, '') : containerName(element)
-        const view = new FormView<S>(element.id, fullName, options)
+        const control = isControl(element)
+        const fullName = control ? element.name.replace(/\[\]$/, '') : containerName(element)
+        const id = control || !fullName ? element.id : idOf(fullName)
+        const view = new FormView<S>(id, fullName, options)
         view.#anchor = element as HTMLElement
 
         return view
@@ -250,8 +255,11 @@ export class FormView<S = AnyShape> {
 }
 
 /**
- * The root of a rendered form: a `<form>` element, any container, or the
- * form's id (Symfony names a root form after its id: `user`).
+ * The root of a rendered form: a `<form>` element, the form's id (Symfony
+ * names a root form after its id: `user`), or any element holding fields, read
+ * as the form node they share (`.amount-part` around `rent[debits][0][amountPart][…]`).
+ * An element given is also where lookups happen: the same form rendered
+ * elsewhere on the page is not seen.
  */
 export function formView<S = AnyShape>(root: string | Element, options: FormViewOptions = {}): FormView<S> {
     if (typeof root === 'string') {
@@ -263,12 +271,13 @@ export function formView<S = AnyShape>(root: string | Element, options: FormView
         return new FormView<S>(name, name, { root, ...options })
     }
 
-    return FormView.fromElement<S>(root, options)
+    return FormView.fromElement<S>(root, { root, ...options })
 }
 
 /**
  * The name prefix of a container: from its prototype (`user[phones][__name__]…`),
- * else from a field whose id continues the container's.
+ * else from a field whose id continues the container's, else the prefix its
+ * fields' names share.
  */
 function containerName(container: Element): string {
     if (container instanceof HTMLElement && container.dataset.prototype) {
@@ -280,23 +289,65 @@ function containerName(container: Element): string {
         }
     }
 
-    if (!container.id) {
-        return ''
-    }
-
-    for (const control of container.querySelectorAll(`[id^="${container.id}_"][name]`)) {
-        const segments = (control.getAttribute('name') ?? '').replace(/\]/g, '').split('[').filter(Boolean)
-        const rest = control.id.slice(container.id.length + 1)
-        // The id continues the container's with the last segments joined by `_`
-        for (let start = segments.length - 1; start > 0; start--) {
-            if (segments.slice(start).join('_') === rest) {
-                return `${segments[0]}${segments
-                    .slice(1, start)
-                    .map((segment) => `[${segment}]`)
-                    .join('')}`
+    if (container.id) {
+        for (const control of container.querySelectorAll(`[id^="${container.id}_"][name]`)) {
+            const segments = nameSegments(control.getAttribute('name') ?? '')
+            const rest = control.id.slice(container.id.length + 1)
+            // The id continues the container's with the last segments joined by `_`
+            for (let start = segments.length - 1; start > 0; start--) {
+                if (segments.slice(start).join('_') === rest) {
+                    return nameOf(segments.slice(0, start))
+                }
             }
         }
     }
 
-    return ''
+    return sharedName(container)
+}
+
+/**
+ * The parent node all the fields inside share: `rent[debits][0][amountPart]`
+ * for `…[amountPart][amount]` and `…[amountPart][taxType]`. Unnamed inputs
+ * (a Tom Select search box) are skipped.
+ */
+function sharedName(container: Element): string {
+    let shared: string[] | null = null
+    for (const control of container.querySelectorAll('[name]')) {
+        if (!isControl(control)) {
+            continue
+        }
+
+        const parents = nameSegments(control.name).slice(0, -1)
+        shared = shared === null ? parents : shared.slice(0, mismatch(shared, parents))
+        if (shared.length === 0) {
+            return ''
+        }
+    }
+
+    return shared ? nameOf(shared) : ''
+}
+
+/** `user[phones][0][number][]` → `user`, `phones`, `0`, `number`. */
+function nameSegments(name: string): string[] {
+    return name.replace(/\]/g, '').split('[').filter(Boolean)
+}
+
+/** `user`, `phones`, `0` → `user[phones][0]`. */
+function nameOf(segments: string[]): string {
+    return segments.map((segment, index) => (index ? `[${segment}]` : segment)).join('')
+}
+
+/** The first index where `a` and `b` differ. */
+function mismatch(a: string[], b: string[]): number {
+    let index = 0
+    while (index < a.length && a[index] === b[index]) {
+        index++
+    }
+
+    return index
+}
+
+/** The id Symfony gives a node: its name segments joined by `_`. */
+function idOf(fullName: string): string {
+    return nameSegments(fullName).join('_')
 }
