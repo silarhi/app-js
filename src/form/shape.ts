@@ -12,8 +12,9 @@
  * checked when compiling. Three kinds of nodes:
  *
  *     interface UserForm {
- *         name: FormField<HTMLInputElement>              // a control, a radio group, an expanded choice
+ *         name: FormField<HTMLInputElement, string>      // a control, a radio group, an expanded choice
  *         country: FormField<HTMLSelectElement>          // `element` and `field().element` are a <select>
+ *         tags: FormField<HTMLElement, string[]>         // `field('tags').value` is a string[]
  *         address: { city: FormField }                   // an embedded form
  *         phones: FormCollection<{ number: FormField }>  // a collection: `phones.0.number`
  *         siren?: FormField                              // not always rendered: through `find()`
@@ -25,14 +26,17 @@
 import type { FieldValue } from './values'
 
 declare const field: unique symbol
+declare const value: unique symbol
 declare const collection: unique symbol
 
 /**
- * A leaf: a control, a radio group, or an expanded choice, rendered as `E`:
- * the control (`HTMLSelectElement`), or the container of an expanded choice.
+ * A leaf: a control, a radio group, or an expanded choice, rendered as `E`
+ * (the control, or the container of an expanded choice) and read as `V`: a
+ * `string`, a `boolean` checkbox, the `string[]` of a multiple choice.
  */
-export interface FormField<E extends HTMLElement = HTMLElement> {
+export interface FormField<E extends HTMLElement = HTMLElement, V extends FieldValue = FieldValue> {
     readonly [field]: E
+    readonly [value]: V
 }
 
 /** A collection whose items have the shape `Item`. */
@@ -94,8 +98,21 @@ export type FormChild<S> = NonNullable<S> extends FormCollection<infer Item> ? I
 export type FormElement<S> =
     IsAny<S> extends true ? HTMLElement : NonNullable<S> extends FormField<infer E> ? E : HTMLElement
 
-/** What fills a field: its value, a number, or an entity by its id. */
-export type FormValue = FieldValue | number | { id: unknown }
+/**
+ * The value a node is read as: the one its {@link FormField} names, any
+ * {@link FieldValue} otherwise.
+ */
+export type FormFieldValue<S> =
+    IsAny<S> extends true ? FieldValue : NonNullable<S> extends FormField<HTMLElement, infer V> ? V : FieldValue
+
+/**
+ * What `setValue()` takes for a field read as `V`: `V` itself, `null` to
+ * empty it, a number for a string.
+ */
+export type FieldInput<V extends FieldValue = FieldValue> = V | null | (V extends string ? number : never)
+
+/** What fills a field read as `V`: what `setValue()` takes, or an entity by its id. */
+export type FormValue<V extends FieldValue = FieldValue> = FieldInput<V> | { id: unknown }
 
 /**
  * Values keyed like the fields of `S`, for `fillForm()` and
@@ -106,7 +123,7 @@ export type FormValues<S> =
     IsAny<S> extends true ? Record<string, unknown> : { [K in keyof S & string]?: ValueOf<NonNullable<S[K]>> }
 
 type ValueOf<Node> = Node extends FormField
-    ? FormValue
+    ? FormValue<FormFieldValue<Node>>
     : Node extends FormCollection<infer Item>
-      ? Array<Item extends FormField ? FormValue : FormValues<Item>>
+      ? Array<Item extends FormField ? FormValue<FormFieldValue<Item>> : FormValues<Item>>
       : FormValues<Node>

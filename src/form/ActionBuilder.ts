@@ -9,7 +9,7 @@
 
 import type { Cleanup } from '../types'
 import type { FormDefinition } from './FormDefinition'
-import type { Effect, FieldTarget, Rule } from './rules'
+import type { Effect, FieldTarget, Rule, TargetValue } from './rules'
 import type { AnyShape } from './shape'
 import type { WhenBuilder } from './WhenBuilder'
 
@@ -52,7 +52,7 @@ export class ActionBuilder<S = AnyShape> {
         return this.#add('show', targets).#add('require', targets)
     }
 
-    when(field: FieldTarget<S>): WhenBuilder<S> {
+    when<T extends FieldTarget<S>>(field: T): WhenBuilder<S, TargetValue<S, T>> {
         return this.#definition.when(field)
     }
 

@@ -11,8 +11,11 @@ import { byId } from '../dom'
 import { closest, hint } from '../suggest'
 import { FieldNotFoundError } from './errors'
 import { Field, type FieldOptions } from './Field'
-import type { AnyShape, FormChild, FormElement, FormNodeAt, FormPath, RequiredFormPath } from './shape'
+import type { AnyShape, FormChild, FormElement, FormFieldValue, FormNodeAt, FormPath, RequiredFormPath } from './shape'
 import { type FormControl, isControl, radioGroup } from './values'
+
+/** The {@link Field} of the node at `P`: its element and value types follow the shape. */
+type FieldAt<S, P extends string> = Field<FormElement<FormNodeAt<S, P>>, FormFieldValue<FormNodeAt<S, P>>>
 
 export interface FormViewOptions {
     /** Where ids and names are looked up. Defaults to the document, or to the `<form>` given to `formView()`. */
@@ -37,7 +40,8 @@ export interface FormViewOptions {
  * Given a shape (`formView<UserForm>()`, see `shape.ts`), paths are checked
  * when compiling: `get()` takes the paths always rendered, `find()` and
  * `has()` any path. Without one, every string is a path. A field typed
- * `FormField<HTMLSelectElement>` types `element` and `field().element` too.
+ * `FormField<HTMLSelectElement, string>` types `element`, `field().element`
+ * and `field().value` too.
  */
 export class FormView<S = AnyShape> {
     readonly id: string
@@ -197,11 +201,11 @@ export class FormView<S = AnyShape> {
      * The {@link Field} at `path` (this node by default): value, required,
      * disabled, visibility. It follows the DOM like the node does.
      */
-    field<P extends RequiredFormPath<S> | '' = ''>(path: P = '' as P): Field<FormElement<FormNodeAt<S, P>>> {
+    field<P extends RequiredFormPath<S> | '' = ''>(path: P = '' as P): FieldAt<S, P> {
         const node = this.#get(path)
         node.#field ??= new Field({ element: () => node.element, inputs: () => node.inputs }, node.#options.field)
 
-        return node.#field as Field<FormElement<FormNodeAt<S, P>>>
+        return node.#field as FieldAt<S, P>
     }
 
     #child(segment: string): FormView {

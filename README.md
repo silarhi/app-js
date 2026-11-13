@@ -259,6 +259,7 @@ import { type FormCollection, type FormField, formView } from '@silarhi/app-js/f
 interface PartyForm {
     name: FormField // a control, a radio group, an expanded choice
     country: FormField<HTMLSelectElement> // the element it is rendered as, HTMLElement by default
+    tags: FormField<HTMLElement, string[]> // and the value it is read as, any FieldValue by default
     address: { city: FormField } // an embedded form
     phones: FormCollection<{ number: FormField }> // a collection: `phones.2.number`
     siren?: FormField // not always rendered (it depends on the form's options or data)
@@ -272,6 +273,8 @@ form.get('adress.city') // TS2345: '"adress.city"' is not assignable to '"addres
 form.get('siren') // error: not always rendered, so it goes through find()
 form.get('country').element?.selectedOptions // HTMLSelectElement | null, and field('country') is a Field<HTMLSelectElement>
 collections.add(form.get('phones'), { numbr: '0102' }) // error: values are keyed like the item's fields
+form.field('tags').value // string[]; setValue(true) fails to compile
+definition.when('tags').includes('a') // conditions take the source's values: includes() only on an array, isChecked() on a boolean
 ```
 
 `get()` and `field()` take the paths that are always rendered, `find()` and `has()` any path. A typed form makes a
