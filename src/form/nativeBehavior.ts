@@ -8,7 +8,7 @@
  */
 
 import { on as listen } from '../dom'
-import type { FieldBehavior } from './behavior'
+import type { FieldBehavior, FieldOption } from './behavior'
 import { bootstrapTheme } from './bootstrap'
 import { type FieldValue, type FormControl, getElementValue, isChoice, setElementValue, toValues } from './values'
 
@@ -92,6 +92,51 @@ export const nativeBehavior: Required<FieldBehavior> = {
         }
     },
 
+    setOptions({ field, options, silent }): void {
+        const select = selectOf(field, 'setOptions')
+        const before = state(select)
+        const selected = new Set([...select.selectedOptions].map((option) => option.value))
+
+        for (const option of [...select.options]) {
+            if (option.value !== '') {
+                option.remove()
+            }
+        }
+        for (const choice of options) {
+            const option = createOption(choice)
+            option.selected = selected.has(choice.value)
+            select.add(option)
+        }
+
+        if (!silent) {
+            notify([select], [before])
+        }
+    },
+
+    addOption({ field, option }): void {
+        const select = selectOf(field, 'addOption')
+        if (![...select.options].some(({ value }) => value === option.value)) {
+            const selectedIndex = select.selectedIndex
+            select.add(createOption(option))
+            // A single select with no option picks the first one added: keep it empty
+            if (selectedIndex === -1 && !select.multiple) {
+                select.selectedIndex = -1
+            }
+        }
+    },
+
+    setPlaceholder({ field, placeholder }): void {
+        const input = field.inputs[0]
+        if (input instanceof HTMLSelectElement) {
+            const empty = [...input.options].find(({ value }) => value === '')
+            if (empty) {
+                empty.text = placeholder
+            }
+        } else if (input && !isChoice(input)) {
+            input.placeholder = placeholder
+        }
+    },
+
     on({ field, type, handler }) {
         const removals = field.inputs.map((input) => listen(input, type, handler))
 
@@ -101,6 +146,25 @@ export const nativeBehavior: Required<FieldBehavior> = {
             }
         }
     },
+}
+
+/**
+ * The field's select, which the options parts need.
+ */
+function selectOf(field: { inputs: FormControl[]; expanded: boolean }, part: string): HTMLSelectElement {
+    const [input] = field.inputs
+    if (field.expanded || !(input instanceof HTMLSelectElement)) {
+        throw new Error(`The "${part}" part needs a <select>.`)
+    }
+
+    return input
+}
+
+function createOption({ value, text, data = {} }: FieldOption): HTMLOptionElement {
+    const option = new Option(text, value)
+    Object.assign(option.dataset, data)
+
+    return option
 }
 
 /**

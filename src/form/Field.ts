@@ -11,6 +11,7 @@ import type { Cleanup } from '../types'
 import {
     bindingOf,
     type FieldBehavior,
+    type FieldOption,
     getFieldDefaults,
     type PartName,
     type PartParams,
@@ -106,6 +107,25 @@ export class Field<E extends Element = Element, V extends FieldValue = FieldValu
 
     empty(options: { silent?: boolean } = {}): void {
         this.setValue(null as FieldInput<V>, options)
+    }
+
+    /**
+     * Replace a select's choices, its empty-value option (the placeholder)
+     * kept. The values still offered stay selected; when the selection
+     * changed, `input` and `change` fire unless `silent`.
+     */
+    setOptions(options: readonly FieldOption[], { silent = false }: { silent?: boolean } = {}): void {
+        this.#run('setOptions', { options, silent })
+    }
+
+    /** Add a choice to a select, unless one has its value already; select it with {@link setValue}. */
+    addOption(option: FieldOption): void {
+        this.#run('addOption', { option })
+    }
+
+    /** The text shown while the field is empty. */
+    setPlaceholder(placeholder: string): void {
+        this.#run('setPlaceholder', { placeholder })
     }
 
     /** The block shown/hidden with the field, holding its label; `null` when there is none. */

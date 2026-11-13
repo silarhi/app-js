@@ -12,6 +12,16 @@ import type { Field } from './Field'
 import type { FieldValue } from './values'
 
 /**
+ * A choice of a select: the value it submits, the text it shows, and its
+ * `data-*` attributes (`{ vatRate: '2000' }` is `data-vat-rate="2000"`).
+ */
+export interface FieldOption {
+    value: string
+    text: string
+    data?: Record<string, string>
+}
+
+/**
  * What every part receives: the field, the part's own parameters, and `next()`
  * to defer to the level below.
  */
@@ -39,6 +49,16 @@ export interface FieldBehavior {
     setRequired?: Part<{ required: boolean }, void>
     isDisabled?: Part<object, boolean>
     setDisabled?: Part<{ disabled: boolean }, void>
+    /**
+     * Replace the choices, an empty-value option (the placeholder) kept. The
+     * values still offered stay selected; unless `silent`, notify when the
+     * selection changed.
+     */
+    setOptions?: Part<{ options: readonly FieldOption[]; silent: boolean }, void>
+    /** Add a choice, unless one has its value already. Selects nothing. */
+    addOption?: Part<{ option: FieldOption }, void>
+    /** The text shown while the field is empty: the `placeholder` attribute, a select's empty option. */
+    setPlaceholder?: Part<{ placeholder: string }, void>
     /** Listen to the field; returns the removal. */
     on?: Part<{ type: string; handler: (event: Event) => void }, Cleanup>
     /** The block shown/hidden with the field, holding its label. */
@@ -66,6 +86,7 @@ const bindings = new WeakMap<Element, FieldBehavior>()
  *             getValue: () => ts.getValue(),
  *             setValue: ({ value, silent }) => ts.setValue(value ?? '', silent),
  *             setDisabled: ({ disabled }) => (disabled ? ts.disable() : ts.enable()),
+ *             setOptions: ({ next }) => { next(); ts.clearOptions(); ts.sync() },
  *         })
  *         return () => { unbind(); ts.destroy() }
  *     }

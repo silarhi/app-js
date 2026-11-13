@@ -267,6 +267,113 @@ describe('multiple selects', () => {
     })
 })
 
+describe('options', () => {
+    beforeEach(() => {
+        document.body.innerHTML =
+            '<select id="s"><option value="">Choose</option><option value="a">A</option><option value="b" selected>B</option></select>'
+    })
+
+    const texts = (): string[] => [...$<HTMLSelectElement>('#s').options].map((option) => option.text)
+
+    it('replaces the choices, keeping the placeholder and the values still offered', () => {
+        const select = new Field($<HTMLSelectElement>('#s'))
+        const change = vi.fn()
+        $('#s').addEventListener('change', change)
+
+        select.setOptions([
+            { value: 'b', text: 'Bee' },
+            { value: 'c', text: 'Sea', data: { vatRate: '2000' } },
+        ])
+
+        expect(texts()).toEqual(['Choose', 'Bee', 'Sea'])
+        expect(select.value).toBe('b')
+        expect($<HTMLSelectElement>('#s').options[2].dataset.vatRate).toBe('2000')
+        expect(change).not.toHaveBeenCalled()
+    })
+
+    it('notifies when the selected value is no longer offered, unless silent', () => {
+        const select = new Field($<HTMLSelectElement>('#s'))
+        const change = vi.fn()
+        $('#s').addEventListener('change', change)
+
+        select.setOptions([{ value: 'c', text: 'C' }], { silent: true })
+        expect(select.value).toBe('')
+        expect(change).not.toHaveBeenCalled()
+
+        select.setValue('c', { silent: true })
+        select.setOptions([])
+        expect(texts()).toEqual(['Choose'])
+        expect(change).toHaveBeenCalledOnce()
+    })
+
+    it('adds a choice once, selecting nothing', () => {
+        const select = new Field($<HTMLSelectElement>('#s'))
+
+        select.addOption({ value: 'c', text: 'C', data: { city: 'Albi' } })
+        select.addOption({ value: 'c', text: 'Again' })
+
+        expect(texts()).toEqual(['Choose', 'A', 'B', 'C'])
+        expect(select.value).toBe('b')
+        select.setValue('c')
+        expect(select.value).toBe('c')
+    })
+
+    it('keeps a single select without options empty when one is added', () => {
+        document.body.innerHTML = '<select id="s"></select>'
+        const select = new Field($<HTMLSelectElement>('#s'))
+
+        select.addOption({ value: 'a', text: 'A' })
+
+        expect($<HTMLSelectElement>('#s').selectedIndex).toBe(-1)
+    })
+
+    it('sets the placeholder of a select, an input, and nothing on a checkbox', () => {
+        document.body.innerHTML =
+            '<select id="s"><option value="">Choose</option></select><input id="t"><input id="c" type="checkbox">'
+
+        new Field($('#s')).setPlaceholder('20 %')
+        new Field($('#t')).setPlaceholder('Name')
+        new Field($('#c')).setPlaceholder('ignored')
+
+        expect(texts()).toEqual(['20 %'])
+        expect($('#t').placeholder).toBe('Name')
+        expect($('#c').hasAttribute('placeholder')).toBe(false)
+    })
+
+    it('needs a select to change the choices', () => {
+        document.body.innerHTML =
+            '<div id="r"><input type="radio" name="r" value="a"><input type="radio" name="r" value="b"></div><input id="t">'
+        expect(() => new Field($('#r')).setOptions([])).toThrow('"setOptions" part needs a <select>')
+        expect(() => new Field($('#t')).addOption({ value: 'a', text: 'A' })).toThrow('"addOption" part needs')
+    })
+
+    it('goes through a bound behavior, which wraps the native level', () => {
+        const synced = vi.fn()
+        bindField($('#s'), {
+            setOptions: ({ next }) => {
+                next()
+                synced()
+            },
+            addOption: ({ next }) => {
+                next()
+                synced()
+            },
+            setPlaceholder: ({ next }) => {
+                next()
+                synced()
+            },
+        })
+        const select = new Field($<HTMLSelectElement>('#s'))
+
+        select.setOptions([{ value: 'a', text: 'A' }])
+        select.addOption({ value: 'b', text: 'B' })
+        select.setPlaceholder('Pick')
+
+        expect(texts()).toEqual(['Pick', 'A', 'B'])
+        expect(synced).toHaveBeenCalledTimes(3)
+    })
+})
+
 describe('element level: bindField', () => {
     /** Stands in for tom-select: the value and the disabled state live in the library instance. */
     function enhance(): { instance: { items: string[]; disabled: boolean }; behavior: FieldBehavior } {

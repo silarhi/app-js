@@ -296,10 +296,19 @@ city.required // true; city.disabled too: read back through the behavior levels 
 city.hide() // its group; city.setVisible(false, 'self') hides the element itself
 city.empty() // setValue(null): unchecked, cleared, or no option selected
 city.onChange(handler) // returns the removal
+
+const lease = new Field(document.getElementById('rent_lease')) // a select
+lease.setOptions([{ value: '12', text: 'Lease 12', data: { tenant: 'Ada' } }]) // its empty option stays; data-* attributes
+lease.addOption({ value: '13', text: 'Lease 13' }) // once per value, selects nothing: lease.setValue('13') does
+lease.setPlaceholder('Pick a lease') // a select's empty option, an input's placeholder attribute
 ```
 
+`setOptions()` keeps the values still offered selected and fires `input` / `change` when the selection changed
+(`{ silent: true }` skips them). A library that renders its own list (tom-select) wraps them in its `bindField()`
+behavior, the native level having written the `<option>`s.
+
 **Behaviors.** Each operation of a field is a part of a `FieldBehavior`: `getValue`, `setValue`, `isRequired`,
-`setRequired`, `isDisabled`, `setDisabled` and `on` for the control; `group`, `label`, `setVisible` and `markRequired`
+`setRequired`, `isDisabled`, `setDisabled`, `setOptions`, `addOption`, `setPlaceholder` and `on` for the control; `group`, `label`, `setVisible` and `markRequired`
 for the markup. A field resolves each part on every call through four levels, the first that implements it winning:
 
 | Level   | Set with                             | For                                                          |
@@ -329,6 +338,11 @@ export default defineListener({
             getValue: () => ts.getValue(),
             setValue: ({ value, silent }) => ts.setValue(value ?? '', silent), // null empties; notify unless silent
             setDisabled: ({ disabled }) => (disabled ? ts.disable() : ts.enable()),
+            setOptions: ({ next }) => {
+                next() // the <option>s
+                ts.clearOptions()
+                ts.sync()
+            },
         })
 
         return () => {

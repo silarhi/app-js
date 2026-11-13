@@ -8,7 +8,7 @@
  */
 
 export type { ActionBuilder } from './ActionBuilder'
-export type { FieldBehavior, Part } from './behavior'
+export type { FieldBehavior, FieldOption, Part } from './behavior'
 export { bindField, getFieldDefaults, setFieldDefaults } from './behavior'
 export type { BootstrapThemeOptions } from './bootstrap'
 export { bootstrapTheme } from './bootstrap'
