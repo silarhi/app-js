@@ -8,13 +8,19 @@
  */
 
 import { beforeEach, describe, expect, expectTypeOf, it } from 'vitest'
+import { App } from '../../src/App'
 import {
     block,
+    CollectionManager,
+    type Field,
     type FormCollection,
     FormDefinition,
     type FormField,
     type FormPath,
+    type FormValue,
+    type FormValues,
     type FormView,
+    fillForm,
     formView,
     type RequiredFormPath,
 } from '../../src/form'
@@ -22,14 +28,14 @@ import { USER_FORM } from './fixtures'
 
 /** The shape of `USER_FORM`; `siren` depends on an option and is not rendered there. */
 interface UserForm {
-    name: FormField
+    name: FormField<HTMLInputElement>
     start_date: FormField
-    agree: FormField
+    agree: FormField<HTMLInputElement>
     address: { city: FormField }
     size: FormField
     tags: FormField
-    roles: FormField
-    phones: FormCollection<{ number: FormField }>
+    roles: FormField<HTMLSelectElement>
+    phones: FormCollection<{ number: FormField<HTMLInputElement> }>
     notes: FormCollection<FormField>
     siren?: FormField
     company?: { name: FormField }
@@ -71,8 +77,8 @@ describe('typed paths', () => {
         expect(form.has('siren')).toBe(false)
 
         expectTypeOf(form.get('address')).toEqualTypeOf<FormView<{ city: FormField }>>()
-        expectTypeOf(form.get('phones.0')).toEqualTypeOf<FormView<{ number: FormField }>>()
-        expectTypeOf(form.get('phones').children).toEqualTypeOf<FormView<{ number: FormField }>[]>()
+        expectTypeOf(form.get('phones.0')).toEqualTypeOf<FormView<{ number: FormField<HTMLInputElement> }>>()
+        expectTypeOf(form.get('phones').children).toEqualTypeOf<FormView<{ number: FormField<HTMLInputElement> }>[]>()
         expectTypeOf(form.find('siren')).toEqualTypeOf<FormView<FormField> | null>()
 
         const mistakes = (): void => {
@@ -99,6 +105,61 @@ describe('typed paths', () => {
 
         expect(form.get('address').get('city').id).toBe('user_address_city')
         expectTypeOf(form.get).parameter(0).toEqualTypeOf<string>()
+        expectTypeOf(form.get('roles').element).toEqualTypeOf<HTMLElement | null>()
+        expectTypeOf(form.field('roles')).toEqualTypeOf<Field<HTMLElement>>()
+    })
+})
+
+describe('typed elements', () => {
+    it('types the element a field names', () => {
+        const form = formView<UserForm>('user')
+
+        expect(form.get('roles').element?.multiple).toBe(true)
+        expect(form.field('roles').element?.selectedOptions).toHaveLength(1)
+        expect(form.get('phones.0.number').element?.value).toBe('01')
+
+        expectTypeOf(form.get('roles').element).toEqualTypeOf<HTMLSelectElement | null>()
+        expectTypeOf(form.field('agree')).toEqualTypeOf<Field<HTMLInputElement>>()
+        expectTypeOf(form.get('roles').field()).toEqualTypeOf<Field<HTMLSelectElement>>()
+        // A form, a collection, a field without one: an HTMLElement
+        expectTypeOf(form.get('address').element).toEqualTypeOf<HTMLElement | null>()
+        expectTypeOf(form.get('phones').element).toEqualTypeOf<HTMLElement | null>()
+        expectTypeOf(form.field('size').element).toEqualTypeOf<HTMLElement | null>()
+    })
+})
+
+describe('typed values', () => {
+    it('keys values like the fields of the shape', () => {
+        expectTypeOf<FormValues<{ a: FormField; b: { c: FormField } }>>().toEqualTypeOf<{
+            a?: FormValue
+            b?: { c?: FormValue }
+        }>()
+        expectTypeOf<FormValues<{ items: FormCollection<{ x: FormField }> }>>().toEqualTypeOf<{
+            items?: Array<{ x?: FormValue }>
+        }>()
+    })
+
+    it('checks what fills a typed form or collection', () => {
+        const form = formView<UserForm>('user')
+        const collections = new CollectionManager({ app: new App() })
+        const added = collections.add(form.get('phones'), { number: '0607' })
+        collections.each(form.get('phones'), ({ form: item }) => {
+            expectTypeOf(item).toEqualTypeOf<FormView<{ number: FormField<HTMLInputElement> }>>()
+        })
+        fillForm(form, { name: 'Grace', address: { city: 'Paris' }, phones: [{ number: '0708' }] }, () => {})
+
+        expect(added.querySelector('input')?.value).toBe('0607')
+        expect(form.field('address.city').value).toBe('Paris')
+
+        const mistakes = (): void => {
+            // @ts-expect-error a typo in an item field
+            collections.add(form.get('phones'), { numbr: '0607' })
+            // @ts-expect-error an embedded form takes an object
+            fillForm(form, { address: 'Paris' }, () => {})
+            // @ts-expect-error a typo in a field
+            fillForm(form, { nmae: 'Grace' }, () => {})
+        }
+        expect(mistakes).toBeTypeOf('function')
     })
 
     it('checks the targets of a typed FormDefinition', () => {

@@ -29,7 +29,10 @@ export interface FieldOptions {
  * expanded choice), explicit inputs, or resolvers read on every access, so
  * the field follows DOM changes.
  */
-export type FieldSource = Element | FormControl[] | { element: () => Element | null; inputs: () => FormControl[] }
+export type FieldSource<E extends Element = Element> =
+    | E
+    | FormControl[]
+    | { element: () => E | null; inputs: () => FormControl[] }
 
 /**
  * One form field and what a page does with it: read and write its value,
@@ -39,18 +42,21 @@ export type FieldSource = Element | FormControl[] | { element: () => Element | n
  * Every operation is a {@link FieldBehavior} part, resolved on each call
  * through the field, its element's binding, the app defaults and the native
  * behavior.
+ *
+ * `E` is the element's type: `new Field(select)`, or a typed
+ * `form.field('country')`, gives a `Field<HTMLSelectElement>`.
  */
-export class Field {
-    readonly #element: () => Element | null
+export class Field<E extends Element = Element> {
+    readonly #element: () => E | null
     readonly #inputs: () => FormControl[]
     readonly #behavior: FieldBehavior | undefined
 
-    constructor(source: FieldSource, { behavior }: FieldOptions = {}) {
+    constructor(source: FieldSource<E>, { behavior }: FieldOptions = {}) {
         this.#behavior = behavior
 
         if (Array.isArray(source)) {
             const inputs = [...source]
-            this.#element = () => (inputs.length === 1 ? inputs[0] : null)
+            this.#element = () => (inputs.length === 1 ? (inputs[0] as Element as E) : null)
             this.#inputs = () => inputs
         } else if (source instanceof Element) {
             this.#element = () => source
@@ -62,7 +68,7 @@ export class Field {
     }
 
     /** The control itself, or the container of an expanded choice. */
-    get element(): Element | null {
+    get element(): E | null {
         return this.#element()
     }
 
@@ -80,7 +86,7 @@ export class Field {
     get expanded(): boolean {
         const inputs = this.inputs
 
-        return isChoice(inputs[0]) && (inputs.length > 1 || inputs[0] !== this.element)
+        return isChoice(inputs[0]) && (inputs.length > 1 || inputs[0] !== (this.element as Element | null))
     }
 
     get value(): FieldValue {
