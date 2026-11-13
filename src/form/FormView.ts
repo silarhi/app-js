@@ -11,7 +11,7 @@ import { byId } from '../dom'
 import { closest, hint } from '../suggest'
 import { FieldNotFoundError } from './errors'
 import { Field, type FieldOptions } from './Field'
-import type { AnyShape, FormChild, FormNodeAt, FormPath, RequiredFormPath } from './shape'
+import type { AnyShape, FormChild, FormElement, FormNodeAt, FormPath, RequiredFormPath } from './shape'
 import { type FormControl, isControl, radioGroup } from './values'
 
 export interface FormViewOptions {
@@ -36,7 +36,8 @@ export interface FormViewOptions {
  *
  * Given a shape (`formView<UserForm>()`, see `shape.ts`), paths are checked
  * when compiling: `get()` takes the paths always rendered, `find()` and
- * `has()` any path. Without one, every string is a path.
+ * `has()` any path. Without one, every string is a path. A field typed
+ * `FormField<HTMLSelectElement>` types `element` and `field().element` too.
  */
 export class FormView<S = AnyShape> {
     readonly id: string
@@ -90,8 +91,8 @@ export class FormView<S = AnyShape> {
         return this.parent ? this.parent.root : this
     }
 
-    get element(): HTMLElement | null {
-        return (this.id ? byId(this.id, this.#scope()) : null) ?? this.#anchor
+    get element(): FormElement<S> | null {
+        return ((this.id ? byId(this.id, this.#scope()) : null) ?? this.#anchor) as FormElement<S> | null
     }
 
     /**
@@ -157,8 +158,9 @@ export class FormView<S = AnyShape> {
         }
 
         // Expanded choices share one name: their options are told apart by id
+        const element: Element | null = this.element
         for (const input of this.inputs) {
-            if (input !== this.element && input.id.startsWith(`${this.id}_`)) {
+            if (input !== element && input.id.startsWith(`${this.id}_`)) {
                 names.add(input.id.slice(this.id.length + 1))
             }
         }
@@ -195,11 +197,11 @@ export class FormView<S = AnyShape> {
      * The {@link Field} at `path` (this node by default): value, required,
      * disabled, visibility. It follows the DOM like the node does.
      */
-    field(path: RequiredFormPath<S> | '' = ''): Field {
+    field<P extends RequiredFormPath<S> | '' = ''>(path: P = '' as P): Field<FormElement<FormNodeAt<S, P>>> {
         const node = this.#get(path)
         node.#field ??= new Field({ element: () => node.element, inputs: () => node.inputs }, node.#options.field)
 
-        return node.#field
+        return node.#field as Field<FormElement<FormNodeAt<S, P>>>
     }
 
     #child(segment: string): FormView {

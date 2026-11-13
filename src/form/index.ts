@@ -16,6 +16,7 @@ export type {
     CollectionEventMap,
     CollectionItemDetail,
     CollectionOptions,
+    CollectionRef,
     CollectionSelectors,
     ConfirmHandler,
     ItemContext,
@@ -35,7 +36,18 @@ export type { AddItem } from './fillForm'
 export { fillForm } from './fillForm'
 export type { BlockTarget, Effect, FieldTarget, Rule } from './rules'
 export { block } from './rules'
-export type { AnyShape, FormChild, FormCollection, FormField, FormNodeAt, FormPath, RequiredFormPath } from './shape'
+export type {
+    AnyShape,
+    FormChild,
+    FormCollection,
+    FormElement,
+    FormField,
+    FormNodeAt,
+    FormPath,
+    FormValue,
+    FormValues,
+    RequiredFormPath,
+} from './shape'
 export type { FieldValue, FormControl } from './values'
 export { getElementValue, radioGroup, setElementValue } from './values'
 export type { WhenBuilder } from './WhenBuilder'

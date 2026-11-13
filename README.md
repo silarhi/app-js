@@ -258,6 +258,7 @@ import { type FormCollection, type FormField, formView } from '@silarhi/app-js/f
 
 interface PartyForm {
     name: FormField // a control, a radio group, an expanded choice
+    country: FormField<HTMLSelectElement> // the element it is rendered as, HTMLElement by default
     address: { city: FormField } // an embedded form
     phones: FormCollection<{ number: FormField }> // a collection: `phones.2.number`
     siren?: FormField // not always rendered (it depends on the form's options or data)
@@ -269,10 +270,13 @@ form.get('phones').get('2.number') // return types follow the path
 form.find('siren')?.field().setValue('') // FormView | null
 form.get('adress.city') // TS2345: '"adress.city"' is not assignable to '"address" | "address.city" | …'
 form.get('siren') // error: not always rendered, so it goes through find()
+form.get('country').element?.selectedOptions // HTMLSelectElement | null, and field('country') is a Field<HTMLSelectElement>
+collections.add(form.get('phones'), { numbr: '0102' }) // error: values are keyed like the item's fields
 ```
 
 `get()` and `field()` take the paths that are always rendered, `find()` and `has()` any path. A typed form makes a
-`FormDefinition` check its targets too. Without a shape, `formView()` takes any string, as before. The shape is a type
+`FormDefinition` check its targets too, and `fillForm()`, `collections.add()` and `collections.each()` the values and
+item views of its collections. Without a shape, `formView()` takes any string, as before. The shape is a type
 only: the DOM stays the source, and a wrong shape still fails at runtime with a `FieldNotFoundError`.
 
 **Fields.** `Field` is what a page does with a field, with or without a form view:

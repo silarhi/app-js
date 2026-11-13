@@ -14,6 +14,7 @@ import type { Cleanup } from '../types'
 import { hasChanged, markFormChanged } from './changes'
 import { FormView } from './FormView'
 import { fillForm } from './fillForm'
+import type { AnyShape, FormCollection, FormValues } from './shape'
 
 /**
  * The markup contract, matching a Symfony collection form theme: a wrapper
@@ -83,13 +84,16 @@ export interface CollectionOptions {
     confirm?: ConfirmHandler
 }
 
-export interface ItemContext extends CollectionItemDetail {
-    /** The item as a form node: `form.get('label').value`. */
-    form: FormView
+export interface ItemContext<Item = AnyShape> extends CollectionItemDetail {
+    /** The item as a form node: `form.get('label').value`, typed after the collection's shape. */
+    form: FormView<Item>
 }
 
-/** The collection element, its id, or its {@link FormView} (`form.get('phones')`). */
-type CollectionRef = HTMLElement | string | FormView
+/**
+ * The collection element, its id, or its {@link FormView} (`form.get('phones')`):
+ * a typed one types the values and the item views as its items.
+ */
+export type CollectionRef<Item = AnyShape> = HTMLElement | string | FormView<FormCollection<Item>>
 
 /**
  * Adds and removes Symfony form collection items from their prototype and
@@ -126,10 +130,10 @@ export class CollectionManager {
      *
      *     collections.add(form.get('phones'), { number: '0102', type: { id: 3 } })
      */
-    add(collection: CollectionRef, values: Record<string, unknown> = {}): HTMLElement {
+    add<Item = AnyShape>(collection: CollectionRef<Item>, values: FormValues<NoInfer<Item>> = {}): HTMLElement {
         const element = this.#resolve(collection)
         const view = this.#view(collection, element)
-        const item = this.#append(element, view, values)
+        const item = this.#append(element, view, values as FormValues<AnyShape>)
         const detail = this.#detail(element, item, view)
 
         this.#added.add(item)
@@ -144,7 +148,7 @@ export class CollectionManager {
      * Append an item to the collection next to `button`: the one its wrapper
      * holds, as an add button placed after the collection finds it.
      */
-    addFrom(button: Element, values: Record<string, unknown> = {}): HTMLElement {
+    addFrom(button: Element, values: FormValues<AnyShape> = {}): HTMLElement {
         const collection = button.closest(this.selectors.wrapper)?.querySelector<HTMLElement>(this.selectors.collection)
         if (!collection) {
             throw new Error(`No "${this.selectors.collection}" found in the "${this.selectors.wrapper}" of the button.`)
@@ -207,10 +211,11 @@ export class CollectionManager {
      * Run `handler` for every item, the existing ones now and the added ones
      * on `collection.add`. Returns the unsubscription.
      */
-    each(collection: CollectionRef, handler: (context: ItemContext) => void): Cleanup {
+    each<Item = AnyShape>(collection: CollectionRef<Item>, handler: (context: ItemContext<Item>) => void): Cleanup {
         const element = this.#resolve(collection)
         const view = this.#view(collection, element)
-        const run = (detail: CollectionItemDetail): void => handler({ ...detail, form: view.get(String(detail.index)) })
+        const run = (detail: CollectionItemDetail): void =>
+            handler({ ...detail, form: view.get(String(detail.index)) as FormView<Item> })
 
         for (const item of this.items(element)) {
             run(this.#detail(element, item, view))
@@ -219,7 +224,7 @@ export class CollectionManager {
         return on(element, COLLECTION_EVENTS.add, (event) => {
             // Nested collections bubble their own events up
             if (event.target === element) {
-                run((event as CustomEvent<CollectionItemDetail>).detail)
+                run(event.detail)
             }
         })
     }
@@ -245,7 +250,7 @@ export class CollectionManager {
      * Render the prototype with the next index, then keep the following one in
      * `data-collection-index`.
      */
-    #append(collection: HTMLElement, view: FormView, values: Record<string, unknown>): HTMLElement {
+    #append(collection: HTMLElement, view: FormView, values: FormValues<AnyShape>): HTMLElement {
         const prototype = collection.dataset.prototype
         if (prototype === undefined) {
             throw new Error('The collection has no "data-prototype" attribute.')
