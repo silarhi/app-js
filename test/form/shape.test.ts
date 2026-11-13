@@ -196,17 +196,21 @@ describe('typed values', () => {
         const form = formView<UserForm>('user')
         const collections = new CollectionManager({ app: new App() })
         const added = collections.add(form.get('phones'), { number: '0607' })
+        const note = collections.add(form.get('notes'), 'first')
         collections.each(form.get('phones'), ({ form: item }) => {
             expectTypeOf(item).toEqualTypeOf<FormView<{ number: FormField<HTMLInputElement> }>>()
         })
         fillForm(form, { name: 'Grace', address: { city: 'Paris' }, phones: [{ number: '0708' }] }, () => {})
 
         expect(added.querySelector('input')?.value).toBe('0607')
+        expect((note as HTMLInputElement).value).toBe('first')
         expect(form.field('address.city').value).toBe('Paris')
 
         const mistakes = (): void => {
             // @ts-expect-error a typo in an item field
             collections.add(form.get('phones'), { numbr: '0607' })
+            // @ts-expect-error an item form takes its fields' values
+            collections.add(form.get('phones'), '0607')
             // @ts-expect-error an embedded form takes an object
             fillForm(form, { address: 'Paris' }, () => {})
             // @ts-expect-error a typo in a field

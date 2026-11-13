@@ -44,6 +44,7 @@ export type {
     FormElement,
     FormField,
     FormFieldValue,
+    FormItemValues,
     FormNodeAt,
     FormPath,
     FormValue,

@@ -54,6 +54,18 @@ describe('fillForm', () => {
         ])
     })
 
+    it('hands each value of a collection of fields to addItem', () => {
+        const addItem = vi.fn()
+        const form = formView('user')
+
+        fillForm(form, { notes: ['first', { id: 3 }] }, addItem)
+
+        expect(addItem.mock.calls).toEqual([
+            [form.get('notes'), 'first'],
+            [form.get('notes'), { id: 3 }],
+        ])
+    })
+
     it('fills existing collection items from an object keyed by index', () => {
         fillForm(formView('user'), { phones: { 2: { number: '99' } } }, vi.fn())
 

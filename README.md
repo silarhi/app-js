@@ -408,7 +408,7 @@ From a page, `collections.each(form.get('items'), ({ item, index, form }) => for
 runs for existing items and for every added one, with each item as a `FormView`, and returns its unsubscription.
 A collection can be given as its `FormView`, its element or its id. `add(collection, values)` adds an item already
 filled, keyed like its fields: nested objects fill embedded forms, arrays add nested collection items, `{ id }` selects
-an entity. The filling itself is `fillForm(node, values, addItem)`, exported for custom item flows:
+an entity. An item that is a field takes its value: `add(form.get('notes'), 'first')`, `{ notes: ['first'] }`. The filling itself is `fillForm(node, values, addItem)`, exported for custom item flows:
 
 ```js
 collections.add(form.get('phones'), { number: '0102', type: { id: 3 }, tags: ['work'] })

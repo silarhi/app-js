@@ -122,8 +122,20 @@ export type FormValue<V extends FieldValue = FieldValue> = FieldInput<V> | { id:
 export type FormValues<S> =
     IsAny<S> extends true ? Record<string, unknown> : { [K in keyof S & string]?: ValueOf<NonNullable<S[K]>> }
 
+/**
+ * What fills a collection item of shape `Item`, for `CollectionManager.add()`:
+ * a value for an item that is a field (`notes: FormCollection<FormField>`),
+ * values keyed like its fields otherwise. Either without a shape.
+ */
+export type FormItemValues<Item> =
+    IsAny<Item> extends true
+        ? FormValues<AnyShape> | FormValue
+        : Item extends FormField
+          ? FormValue<FormFieldValue<Item>>
+          : FormValues<Item>
+
 type ValueOf<Node> = Node extends FormField
     ? FormValue<FormFieldValue<Node>>
     : Node extends FormCollection<infer Item>
-      ? Array<Item extends FormField ? FormValue<FormFieldValue<Item>> : FormValues<Item>>
+      ? Array<FormItemValues<Item>>
       : FormValues<Node>
