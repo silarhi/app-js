@@ -12,13 +12,15 @@ import type { Field } from './Field'
 import type { FieldValue } from './values'
 
 /**
- * A choice of a select: the value it submits, the text it shows, and its
- * `data-*` attributes (`{ vatRate: '2000' }` is `data-vat-rate="2000"`).
+ * A choice of a select: the value it submits, the text it shows, its
+ * `data-*` attributes (`{ vatRate: '2000' }` is `data-vat-rate="2000"`), and
+ * whether it can be picked.
  */
 export interface FieldOption {
     value: string
     text: string
     data?: Record<string, string>
+    disabled?: boolean
 }
 
 /**
@@ -49,6 +51,8 @@ export interface FieldBehavior {
     setRequired?: Part<{ required: boolean }, void>
     isDisabled?: Part<object, boolean>
     setDisabled?: Part<{ disabled: boolean }, void>
+    /** The choices, the empty-value option (the placeholder) left out. */
+    getOptions?: Part<object, FieldOption[]>
     /**
      * Replace the choices, an empty-value option (the placeholder) kept. The
      * values still offered stay selected; unless `silent`, notify when the
@@ -57,6 +61,10 @@ export interface FieldBehavior {
     setOptions?: Part<{ options: readonly FieldOption[]; silent: boolean }, void>
     /** Add a choice, unless one has its value already. Selects nothing. */
     addOption?: Part<{ option: FieldOption }, void>
+    /** Drop a choice; unless `silent`, notify when it was selected. */
+    removeOption?: Part<{ value: string; silent: boolean }, void>
+    /** Let a choice be picked or not; a selected one stays selected. */
+    setOptionDisabled?: Part<{ value: string; disabled: boolean }, void>
     /** The text shown while the field is empty: the `placeholder` attribute, a select's empty option. */
     setPlaceholder?: Part<{ placeholder: string }, void>
     /** Listen to the field; returns the removal. */

@@ -327,6 +327,63 @@ describe('options', () => {
         expect($<HTMLSelectElement>('#s').selectedIndex).toBe(-1)
     })
 
+    it('reads the choices, without the placeholder', () => {
+        document.body.innerHTML =
+            '<select id="s"><option value="">Choose</option><option value="a" data-vat-rate="2000">A</option><option value="b" disabled>B</option></select>'
+
+        expect(new Field($('#s')).options).toEqual([
+            { value: 'a', text: 'A', data: { vatRate: '2000' } },
+            { value: 'b', text: 'B', disabled: true },
+        ])
+    })
+
+    it('writes disabled choices, which read back as written', () => {
+        const select = new Field($<HTMLSelectElement>('#s'))
+        const choices = [
+            { value: 'a', text: 'A', disabled: true },
+            { value: 'c', text: 'C' },
+        ]
+
+        select.setOptions(choices)
+        select.addOption({ value: 'd', text: 'D', disabled: true })
+
+        expect(select.options).toEqual([...choices, { value: 'd', text: 'D', disabled: true }])
+    })
+
+    it('removes a choice, notifying only when it was selected, unless silent', () => {
+        const select = new Field($<HTMLSelectElement>('#s'))
+        const change = vi.fn()
+        $('#s').addEventListener('change', change)
+
+        select.removeOption('a')
+        expect(texts()).toEqual(['Choose', 'B'])
+        expect(change).not.toHaveBeenCalled()
+
+        select.removeOption('b')
+        expect(texts()).toEqual(['Choose'])
+        expect(select.value).toBe('')
+        expect(change).toHaveBeenCalledOnce()
+
+        select.addOption({ value: 'c', text: 'C' })
+        select.setValue('c', { silent: true })
+        select.removeOption('c', { silent: true })
+        expect(change).toHaveBeenCalledOnce()
+    })
+
+    it('disables a choice in place, keeping it selected', () => {
+        const select = new Field($<HTMLSelectElement>('#s'))
+
+        select.setOptionDisabled('b', true)
+        expect(select.options).toEqual([
+            { value: 'a', text: 'A' },
+            { value: 'b', text: 'B', disabled: true },
+        ])
+        expect(select.value).toBe('b')
+
+        select.setOptionDisabled('b', false)
+        expect(select.options[1]).toEqual({ value: 'b', text: 'B' })
+    })
+
     it('sets the placeholder of a select, an input, and nothing on a checkbox', () => {
         document.body.innerHTML =
             '<select id="s"><option value="">Choose</option></select><input id="t"><input id="c" type="checkbox">'
@@ -345,6 +402,9 @@ describe('options', () => {
             '<div id="r"><input type="radio" name="r" value="a"><input type="radio" name="r" value="b"></div><input id="t">'
         expect(() => new Field($('#r')).setOptions([])).toThrow('"setOptions" part needs a <select>')
         expect(() => new Field($('#t')).addOption({ value: 'a', text: 'A' })).toThrow('"addOption" part needs')
+        expect(() => new Field($('#t')).options).toThrow('"getOptions" part needs')
+        expect(() => new Field($('#t')).removeOption('a')).toThrow('"removeOption" part needs')
+        expect(() => new Field($('#t')).setOptionDisabled('a', true)).toThrow('"setOptionDisabled" part needs')
     })
 
     it('goes through a bound behavior, which wraps the native level', () => {
@@ -362,15 +422,29 @@ describe('options', () => {
                 next()
                 synced()
             },
+            removeOption: ({ next }) => {
+                next()
+                synced()
+            },
+            setOptionDisabled: ({ next }) => {
+                next()
+                synced()
+            },
+            getOptions: () => [{ value: 'own', text: 'From the library' }],
         })
         const select = new Field($<HTMLSelectElement>('#s'))
 
         select.setOptions([{ value: 'a', text: 'A' }])
         select.addOption({ value: 'b', text: 'B' })
+        select.addOption({ value: 'c', text: 'C' })
+        select.removeOption('c')
+        select.setOptionDisabled('b', true)
         select.setPlaceholder('Pick')
 
         expect(texts()).toEqual(['Pick', 'A', 'B'])
-        expect(synced).toHaveBeenCalledTimes(3)
+        expect($<HTMLSelectElement>('#s').options[2].disabled).toBe(true)
+        expect(synced).toHaveBeenCalledTimes(6)
+        expect(select.options).toEqual([{ value: 'own', text: 'From the library' }])
     })
 })
 

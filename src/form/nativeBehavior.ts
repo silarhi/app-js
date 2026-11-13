@@ -92,6 +92,19 @@ export const nativeBehavior: Required<FieldBehavior> = {
         }
     },
 
+    getOptions({ field }): FieldOption[] {
+        return [...selectOf(field, 'getOptions').options]
+            .filter(({ value }) => value !== '')
+            .map((option) => ({
+                value: option.value,
+                text: option.text,
+                ...(Object.keys(option.dataset).length > 0
+                    ? { data: { ...option.dataset } as Record<string, string> }
+                    : {}),
+                ...(option.disabled ? { disabled: true } : {}),
+            }))
+    },
+
     setOptions({ field, options, silent }): void {
         const select = selectOf(field, 'setOptions')
         const before = state(select)
@@ -121,6 +134,28 @@ export const nativeBehavior: Required<FieldBehavior> = {
             // A single select with no option picks the first one added: keep it empty
             if (selectedIndex === -1 && !select.multiple) {
                 select.selectedIndex = -1
+            }
+        }
+    },
+
+    removeOption({ field, value, silent }): void {
+        const select = selectOf(field, 'removeOption')
+        const before = state(select)
+        for (const option of [...select.options]) {
+            if (option.value === value) {
+                option.remove()
+            }
+        }
+
+        if (!silent) {
+            notify([select], [before])
+        }
+    },
+
+    setOptionDisabled({ field, value, disabled }): void {
+        for (const option of selectOf(field, 'setOptionDisabled').options) {
+            if (option.value === value) {
+                option.disabled = disabled
             }
         }
     },
@@ -160,9 +195,10 @@ function selectOf(field: { inputs: FormControl[]; expanded: boolean }, part: str
     return input
 }
 
-function createOption({ value, text, data = {} }: FieldOption): HTMLOptionElement {
+function createOption({ value, text, data = {}, disabled = false }: FieldOption): HTMLOptionElement {
     const option = new Option(text, value)
     Object.assign(option.dataset, data)
+    option.disabled = disabled
 
     return option
 }

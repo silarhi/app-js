@@ -301,14 +301,19 @@ const lease = new Field(document.getElementById('rent_lease')) // a select
 lease.setOptions([{ value: '12', text: 'Lease 12', data: { tenant: 'Ada' } }]) // its empty option stays; data-* attributes
 lease.addOption({ value: '13', text: 'Lease 13' }) // once per value, selects nothing: lease.setValue('13') does
 lease.setPlaceholder('Pick a lease') // a select's empty option, an input's placeholder attribute
+lease.options // [{ value: '12', text: 'Lease 12', data: { tenant: 'Ada' } }, …]: the empty option left out
+lease.removeOption('12') // input + change when it was selected ({ silent: true } skips them)
+lease.setOptionDisabled('13', true) // { …, disabled: true } in options; a selected choice stays selected
+lease.setOptions([]) // clears the choices: there is no clearOptions()
 ```
 
-`setOptions()` keeps the values still offered selected and fires `input` / `change` when the selection changed
-(`{ silent: true }` skips them). A library that renders its own list (tom-select) wraps them in its `bindField()`
+A `FieldOption` is `{ value, text, data?, disabled? }`, as `options` reads it back. `setOptions()` keeps the values
+still offered selected and fires `input` / `change` when the selection changed (`{ silent: true }` skips them). A library that renders its own list (tom-select) wraps them in its `bindField()`
 behavior, the native level having written the `<option>`s.
 
 **Behaviors.** Each operation of a field is a part of a `FieldBehavior`: `getValue`, `setValue`, `isRequired`,
-`setRequired`, `isDisabled`, `setDisabled`, `setOptions`, `addOption`, `setPlaceholder` and `on` for the control; `group`, `label`, `setVisible` and `markRequired`
+`setRequired`, `isDisabled`, `setDisabled`, `getOptions`, `setOptions`, `addOption`, `removeOption`,
+`setOptionDisabled`, `setPlaceholder` and `on` for the control; `group`, `label`, `setVisible` and `markRequired`
 for the markup. A field resolves each part on every call through four levels, the first that implements it winning:
 
 | Level   | Set with                             | For                                                          |
