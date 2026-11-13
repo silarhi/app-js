@@ -13,8 +13,8 @@ import { appendHTML, byId, on, trigger } from '../dom'
 import type { Cleanup } from '../types'
 import { hasChanged, markFormChanged } from './changes'
 import { FormView } from './FormView'
-import { fillForm } from './fillForm'
-import type { AnyShape, FormCollection, FormValues } from './shape'
+import { fillNode } from './fillForm'
+import type { AnyShape, FormCollection, FormItemValues } from './shape'
 
 /**
  * The markup contract, matching a Symfony collection form theme: a wrapper
@@ -126,14 +126,16 @@ export class CollectionManager {
 
     /**
      * Append an item rendered from the collection's prototype, optionally
-     * filled with `values` keyed like the item's fields (see {@link fillForm}):
+     * filled with `values` keyed like the item's fields (see `fillForm()`),
+     * or with a value for an item that is a field:
      *
      *     collections.add(form.get('phones'), { number: '0102', type: { id: 3 } })
+     *     collections.add(form.get('notes'), 'first')
      */
-    add<Item = AnyShape>(collection: CollectionRef<Item>, values: FormValues<NoInfer<Item>> = {}): HTMLElement {
+    add<Item = AnyShape>(collection: CollectionRef<Item>, values?: FormItemValues<NoInfer<Item>>): HTMLElement {
         const element = this.#resolve(collection)
         const view = this.#view(collection, element)
-        const item = this.#append(element, view, values as FormValues<AnyShape>)
+        const item = this.#append(element, view, values)
         const detail = this.#detail(element, item, view)
 
         this.#added.add(item)
@@ -148,7 +150,7 @@ export class CollectionManager {
      * Append an item to the collection next to `button`: the one its wrapper
      * holds, as an add button placed after the collection finds it.
      */
-    addFrom(button: Element, values: FormValues<AnyShape> = {}): HTMLElement {
+    addFrom(button: Element, values?: FormItemValues<AnyShape>): HTMLElement {
         const collection = button.closest(this.selectors.wrapper)?.querySelector<HTMLElement>(this.selectors.collection)
         if (!collection) {
             throw new Error(`No "${this.selectors.collection}" found in the "${this.selectors.wrapper}" of the button.`)
@@ -250,7 +252,7 @@ export class CollectionManager {
      * Render the prototype with the next index, then keep the following one in
      * `data-collection-index`.
      */
-    #append(collection: HTMLElement, view: FormView, values: FormValues<AnyShape>): HTMLElement {
+    #append(collection: HTMLElement, view: FormView, values: unknown): HTMLElement {
         const prototype = collection.dataset.prototype
         if (prototype === undefined) {
             throw new Error('The collection has no "data-prototype" attribute.')
@@ -263,9 +265,9 @@ export class CollectionManager {
             prototype.replaceAll(collection.dataset.prototypeName || '__name__', String(index))
         ) as HTMLElement[]
         item.dataset.collectionItemIndex = String(index)
-        if (Object.keys(values).length > 0) {
+        if (!isEmpty(values)) {
             // Nested items are silent: the outer item's events cover them
-            fillForm(view.get(String(index)), values, (nested, itemValues) => {
+            fillNode(view.get(String(index)), values, (nested, itemValues) => {
                 this.#append(nested.element as HTMLElement, nested, itemValues)
             })
         }
@@ -339,3 +341,8 @@ export class CollectionManager {
 }
 
 const isIndex = (name: string): boolean => /^\d+$/.test(name)
+
+/** No values to fill an item with: none given, or an empty object. */
+const isEmpty = (values: unknown): boolean =>
+    values === undefined ||
+    (typeof values === 'object' && values !== null && !Array.isArray(values) && Object.keys(values).length === 0)

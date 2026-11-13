@@ -206,6 +206,31 @@ describe('add with values', () => {
         expect(input(item).value).toBe('')
     })
 
+    it('fills an item that is a field with a value', () => {
+        $('#tasks').dataset.prototype =
+            '<div class="collection-item"><input id="tasks___name__" name="tasks[__name__]" class="form-control"></div>'
+
+        const item = manager().add('tasks', 'first')
+
+        expect(input(item).value).toBe('first')
+    })
+
+    it('fills a nested collection of field items from an array of values', () => {
+        const nested = escapeHtml(
+            '<div class="collection-item"><input id="tasks___name___notes___note__" name="tasks[__name__][notes][__note__]"></div>'
+        )
+        $('#tasks').dataset.prototype = `<div class="collection-item">
+            <div id="tasks___name___notes" class="form-collection" data-prototype-name="__note__" data-prototype="${nested}"></div>
+        </div>`
+
+        const item = manager().add('tasks', { notes: ['first', 'second'] })
+
+        expect([...item.querySelectorAll('input')].map((note) => [note.id, note.value])).toEqual([
+            ['tasks_1_notes_0', 'first'],
+            ['tasks_1_notes_1', 'second'],
+        ])
+    })
+
     it('leaves fields without a value untouched', () => {
         const item = manager().add('tasks', { label: undefined, unknown: 'x', address: {} })
 
