@@ -246,6 +246,11 @@ Symfony builds every id and name from the path (`user_address_city`, `user[addre
 back from ids, where `_` in field names would be ambiguous, and nothing is cached: items added later are found
 right away. A node only navigates; `field(path)` returns its `Field`, one per node, following the DOM too.
 
+Any element holding fields is a root: the node its fields share. `formView(dom('.amount-part'))` around
+`rent[debits][0][amountPart][amount]` and `…[taxType]` is the `amountPart` node, with `field('amount')`, whatever id
+the wrapper carries. An element (a `<form>` too) also scopes the lookups: the same form rendered elsewhere on the page,
+behind a modal, is not seen.
+
 **Typed paths.** Given the shape of the form, paths are checked when compiling:
 
 ```ts
