@@ -17,6 +17,7 @@ import {
     type PartResult,
 } from './behavior'
 import { nativeBehavior } from './nativeBehavior'
+import type { FieldInput } from './shape'
 import { type FieldValue, type FormControl, isChoice, isControl, radioGroup } from './values'
 
 export interface FieldOptions {
@@ -44,9 +45,10 @@ export type FieldSource<E extends Element = Element> =
  * behavior.
  *
  * `E` is the element's type: `new Field(select)`, or a typed
- * `form.field('country')`, gives a `Field<HTMLSelectElement>`.
+ * `form.field('country')`, gives a `Field<HTMLSelectElement>`. `V` is the
+ * type of its value, from the form's shape: `Field<HTMLElement, string[]>`.
  */
-export class Field<E extends Element = Element> {
+export class Field<E extends Element = Element, V extends FieldValue = FieldValue> {
     readonly #element: () => E | null
     readonly #inputs: () => FormControl[]
     readonly #behavior: FieldBehavior | undefined
@@ -89,8 +91,8 @@ export class Field<E extends Element = Element> {
         return isChoice(inputs[0]) && (inputs.length > 1 || inputs[0] !== (this.element as Element | null))
     }
 
-    get value(): FieldValue {
-        return this.#run('getValue', {})
+    get value(): V {
+        return this.#run('getValue', {}) as V
     }
 
     /**
@@ -98,12 +100,12 @@ export class Field<E extends Element = Element> {
      * rules and listeners follow as they would after a user edit. `silent`
      * skips the notification.
      */
-    setValue(value: FieldValue | number, { silent = false }: { silent?: boolean } = {}): void {
-        this.#run('setValue', { value, silent })
+    setValue(value: FieldInput<V>, { silent = false }: { silent?: boolean } = {}): void {
+        this.#run('setValue', { value: value as FieldValue | number, silent })
     }
 
     empty(options: { silent?: boolean } = {}): void {
-        this.setValue(null, options)
+        this.setValue(null as FieldInput<V>, options)
     }
 
     /** The block shown/hidden with the field, holding its label; `null` when there is none. */

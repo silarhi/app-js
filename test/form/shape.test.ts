@@ -13,6 +13,7 @@ import {
     block,
     CollectionManager,
     type Field,
+    type FieldValue,
     type FormCollection,
     FormDefinition,
     type FormField,
@@ -28,13 +29,13 @@ import { USER_FORM } from './fixtures'
 
 /** The shape of `USER_FORM`; `siren` depends on an option and is not rendered there. */
 interface UserForm {
-    name: FormField<HTMLInputElement>
+    name: FormField<HTMLInputElement, string>
     start_date: FormField
-    agree: FormField<HTMLInputElement>
+    agree: FormField<HTMLInputElement, boolean>
     address: { city: FormField }
-    size: FormField
-    tags: FormField
-    roles: FormField<HTMLSelectElement>
+    size: FormField<HTMLElement, string>
+    tags: FormField<HTMLElement, string[]>
+    roles: FormField<HTMLSelectElement, string[]>
     phones: FormCollection<{ number: FormField<HTMLInputElement> }>
     notes: FormCollection<FormField>
     siren?: FormField
@@ -119,12 +120,64 @@ describe('typed elements', () => {
         expect(form.get('phones.0.number').element?.value).toBe('01')
 
         expectTypeOf(form.get('roles').element).toEqualTypeOf<HTMLSelectElement | null>()
-        expectTypeOf(form.field('agree')).toEqualTypeOf<Field<HTMLInputElement>>()
-        expectTypeOf(form.get('roles').field()).toEqualTypeOf<Field<HTMLSelectElement>>()
+        expectTypeOf(form.field('agree')).toEqualTypeOf<Field<HTMLInputElement, boolean>>()
+        expectTypeOf(form.get('roles').field()).toEqualTypeOf<Field<HTMLSelectElement, string[]>>()
         // A form, a collection, a field without one: an HTMLElement
         expectTypeOf(form.get('address').element).toEqualTypeOf<HTMLElement | null>()
         expectTypeOf(form.get('phones').element).toEqualTypeOf<HTMLElement | null>()
         expectTypeOf(form.field('size').element).toEqualTypeOf<HTMLElement | null>()
+    })
+})
+
+describe('typed field values', () => {
+    it('types the value a field names', () => {
+        const form = formView<UserForm>('user')
+
+        expect(form.field('tags').value).toEqual(['a', 'c'])
+        expect(form.field('agree').value).toBe(false)
+        form.field('name').setValue(3)
+        form.field('roles').setValue(null)
+
+        expectTypeOf(form.field('tags').value).toEqualTypeOf<string[]>()
+        expectTypeOf(form.field('agree').value).toEqualTypeOf<boolean>()
+        expectTypeOf(form.field('size').value).toEqualTypeOf<string>()
+        expectTypeOf(form.field('start_date').value).toEqualTypeOf<FieldValue>()
+        expectTypeOf(formView('user').field('tags').value).toEqualTypeOf<FieldValue>()
+
+        const mistakes = (): void => {
+            // @ts-expect-error a checkbox takes a boolean
+            form.field('agree').setValue('yes')
+            // @ts-expect-error a multiple choice takes an array
+            form.field('tags').setValue(true)
+        }
+        expect(mistakes).toBeTypeOf('function')
+    })
+
+    it('types the conditions of a rule on its source', () => {
+        const definition = new FormDefinition({ form: formView<UserForm>('user') })
+
+        definition.when('size').equals('m').show('address.city')
+        definition.when('tags').includes('a').show('name')
+        definition.when('agree').isChecked().show('name')
+        definition.when('start_date').isChecked().show('name')
+        definition
+            .when('name')
+            .select((input) => input.value.length > 3)
+            .equals(true)
+            .show('address.city')
+        expect(definition.rules).toHaveLength(5)
+
+        const mistakes = (): void => {
+            // @ts-expect-error a choice of strings is never true
+            definition.when('size').equals(true)
+            // @ts-expect-error includes() is for an array value
+            definition.when('size').includes('m')
+            // @ts-expect-error not a checkbox
+            definition.when('name').isChecked()
+            // @ts-expect-error an option is a string
+            definition.when('tags').includes(1)
+        }
+        expect(mistakes).toBeTypeOf('function')
     })
 })
 
@@ -158,6 +211,8 @@ describe('typed values', () => {
             fillForm(form, { address: 'Paris' }, () => {})
             // @ts-expect-error a typo in a field
             fillForm(form, { nmae: 'Grace' }, () => {})
+            // @ts-expect-error a checkbox takes a boolean
+            fillForm(form, { agree: 'yes' }, () => {})
         }
         expect(mistakes).toBeTypeOf('function')
     })

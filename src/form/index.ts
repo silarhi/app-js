@@ -34,14 +34,16 @@ export type { FormViewOptions } from './FormView'
 export { FormView, formView } from './FormView'
 export type { AddItem } from './fillForm'
 export { fillForm } from './fillForm'
-export type { BlockTarget, Effect, FieldTarget, Rule } from './rules'
+export type { BlockTarget, Effect, FieldTarget, Rule, TargetValue } from './rules'
 export { block } from './rules'
 export type {
     AnyShape,
+    FieldInput,
     FormChild,
     FormCollection,
     FormElement,
     FormField,
+    FormFieldValue,
     FormNodeAt,
     FormPath,
     FormValue,

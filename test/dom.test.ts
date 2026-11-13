@@ -7,8 +7,9 @@
  * with this source code in the file LICENSE.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { appendHTML, byId, domReady, escapeHtml, findAll, findAllSelf, findOne, on, trigger } from '../src'
+import type { CollectionItemDetail } from '../src/form'
 
 beforeEach(() => {
     document.body.innerHTML = '<div id="root" class="match"><p class="match"></p><p></p></div><p class="match"></p>'
@@ -128,6 +129,21 @@ describe('trigger', () => {
         expect(seen).toHaveBeenCalledOnce()
         expect(event.detail).toEqual({ id: 1 })
         expect(event.defaultPrevented).toBe(true)
+        expectTypeOf(event.detail).toEqualTypeOf<{ id: number }>()
+    })
+
+    it('checks the detail of a declared custom event', () => {
+        const element = document.createElement('div')
+        const detail: CollectionItemDetail = { collection: element, item: element, index: 0 }
+
+        expectTypeOf(trigger(element, 'collection.add', detail).detail).toEqualTypeOf<CollectionItemDetail>()
+        expectTypeOf(trigger<string>(element, 'anything', 'x').detail).toEqualTypeOf<string>()
+
+        const mistakes = (): void => {
+            // @ts-expect-error not the detail of collection.add
+            trigger(element, 'collection.add', { index: 0 })
+        }
+        expect(mistakes).toBeTypeOf('function')
     })
 })
 

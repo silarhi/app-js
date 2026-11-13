@@ -9,7 +9,7 @@
 
 import type { Field } from './Field'
 import type { FormView } from './FormView'
-import type { AnyShape, RequiredFormPath } from './shape'
+import type { AnyShape, FormFieldValue, FormNodeAt, RequiredFormPath } from './shape'
 import type { FieldValue, FormControl } from './values'
 
 /**
@@ -32,6 +32,18 @@ export const block = <const T extends Exclude<FieldTarget, BlockTarget>>(target:
 
 export const isBlock = (target: FieldTarget): target is BlockTarget =>
     typeof target === 'object' && target !== null && 'block' in target
+
+/**
+ * The value a rule reads from its source: the one the shape names for a
+ * path or a node, a `Field`'s own, any {@link FieldValue} otherwise.
+ */
+export type TargetValue<S, T> = T extends string
+    ? FormFieldValue<FormNodeAt<S, T>>
+    : T extends Field<Element, infer V>
+      ? V
+      : T extends FormView<infer N>
+        ? FormFieldValue<N>
+        : FieldValue
 
 export type Effect = 'show' | 'hide' | 'require' | 'disable' | 'empty'
 

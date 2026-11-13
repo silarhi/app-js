@@ -12,7 +12,7 @@ import type { Cleanup } from '../types'
 import { FieldNotFoundError, FormRuleError } from './errors'
 import { Field, type FieldOptions } from './Field'
 import { FormView } from './FormView'
-import { type Effect, type FieldTarget, isBlock, type Rule } from './rules'
+import { type Effect, type FieldTarget, isBlock, type Rule, type TargetValue } from './rules'
 import type { AnyShape } from './shape'
 import { WhenBuilder } from './WhenBuilder'
 
@@ -60,8 +60,9 @@ export class FormDefinition<S = AnyShape> {
         return this.#rules
     }
 
-    when(field: FieldTarget<S>): WhenBuilder<S> {
-        return new WhenBuilder<S>(this, field)
+    /** Starts a rule on `field`; its conditions take the values the shape names for it. */
+    when<T extends FieldTarget<S>>(field: T): WhenBuilder<S, TargetValue<S, T>> {
+        return new WhenBuilder<S, TargetValue<S, T>>(this, field)
     }
 
     /** Declare a rule directly; `when()` builds them for you. */

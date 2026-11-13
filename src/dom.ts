@@ -99,11 +99,26 @@ export function findAll<E extends Element = HTMLElement>(selector: string, root:
 }
 
 /**
- * Dispatch a bubbling, cancelable `CustomEvent` and return it, so callers can
- * check `defaultPrevented`.
+ * The `detail` of an event type: the one `HTMLElementEventMap` declares for a
+ * custom event (`collection.add`, see `CollectionEventMap`), `T` otherwise.
  */
-export function trigger<T = unknown>(target: EventTarget, type: string, detail?: T): CustomEvent<T> {
-    const event = new CustomEvent<T>(type, { bubbles: true, cancelable: true, detail })
+type DetailOf<K extends string, T> = K extends keyof HTMLElementEventMap
+    ? HTMLElementEventMap[K] extends CustomEvent<infer D>
+        ? D
+        : never
+    : T
+
+/**
+ * Dispatch a bubbling, cancelable `CustomEvent` and return it, so callers can
+ * check `defaultPrevented`. A custom event the DOM event maps declare has its
+ * `detail` checked.
+ */
+export function trigger<T = unknown, K extends string = string>(
+    target: EventTarget,
+    type: K,
+    detail?: DetailOf<K, T>
+): CustomEvent<DetailOf<K, T>> {
+    const event = new CustomEvent<DetailOf<K, T>>(type, { bubbles: true, cancelable: true, detail })
     target.dispatchEvent(event)
 
     return event
