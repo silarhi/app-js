@@ -14,6 +14,7 @@ import { Field, type FieldOptions } from './Field'
 import { FormView } from './FormView'
 import { type Effect, type FieldTarget, isBlock, type Rule, type TargetValue } from './rules'
 import type { AnyShape } from './shape'
+import { type FormControl, isControl } from './values'
 import { WhenBuilder } from './WhenBuilder'
 
 const MAX_PASSES = 10
@@ -45,6 +46,9 @@ export interface FormDefinitionOptions<S = AnyShape> {
  * - `.empty()` clears the target while its rule matches.
  * - A hidden target is never required; shown, it is required as its
  *   `.require()` rules say, else as it was rendered.
+ * - A block holding several fields (a panel) hides them all: none is
+ *   required while it is hidden, each gets its own state back once shown.
+ *   Require its fields, not the panel.
  */
 export class FormDefinition<S = AnyShape> {
     readonly #rules: Rule[] = []
@@ -79,6 +83,7 @@ export class FormDefinition<S = AnyShape> {
         const sources = new Set<Field>()
         const targets = new Map<Field, { group?: Buckets; block?: Buckets }>()
 
+        const panels = new Set<Field>()
         this.#rules.forEach((rule, index) => {
             const source = this.#resolveFor(rule.field, index + 1, 'source')
             sources.add(source)
@@ -87,6 +92,17 @@ export class FormDefinition<S = AnyShape> {
             const kinds = targets.get(target) ?? {}
             targets.set(target, kinds)
             const kind = isBlock(rule.target) ? 'block' : 'group'
+            if (kind === 'block' && isPanel(target)) {
+                if (rule.effect === 'require') {
+                    throw new FormRuleError(
+                        `Cannot require the block of rule #${index + 1}: it holds several fields, require them instead.`,
+                        index + 1,
+                        rule.effect,
+                        null
+                    )
+                }
+                panels.add(target)
+            }
             kinds[kind] ??= { show: [], hide: [], require: [], disable: [], empty: [] }
             kinds[kind][rule.effect].push(() =>
                 rule.test(rule.extractor ? rule.extractor(source.inputs[0]) : source.value)
@@ -101,8 +117,14 @@ export class FormDefinition<S = AnyShape> {
             rendered.set(field, field.required)
         }
 
+        // Panels first: the rules of the fields inside, applied after, have the last word
+        const ordered = [...targets].sort(([a], [b]) => Number(panels.has(b)) - Number(panels.has(a)))
+        // What a hidden panel took from its fields, given back once it is shown
+        const saved = new WeakMap<Field, boolean>()
+
         const pass = (): void => {
-            for (const [field, kinds] of targets) {
+            const hiddenPanels: Element[] = []
+            for (const [field, kinds] of ordered) {
                 let hidden = false
                 let toggled = false
                 let required: boolean | undefined
@@ -126,6 +148,18 @@ export class FormDefinition<S = AnyShape> {
 
                 // A hidden field is never required: the browser would block the
                 // submit on a control nobody can see
+                if (panels.has(field)) {
+                    if (toggled) {
+                        if (hidden) {
+                            hiddenPanels.push(field.element as Element)
+                        }
+                        this.#togglePanelRequired(field, hidden, saved)
+                    }
+                    continue
+                }
+
+                const anchor = field.element ?? field.inputs[0]
+                hidden ||= hiddenPanels.some((panel) => anchor !== undefined && panel.contains(anchor))
                 if (required !== undefined || toggled) {
                     field.setRequired(!hidden && (required ?? rendered.get(field) ?? false))
                 }
@@ -201,6 +235,35 @@ export class FormDefinition<S = AnyShape> {
         return field
     }
 
+    /**
+     * Hidden, none of a panel's fields is required; shown, each gets back the
+     * state it had before. Through each field, so bindings and labels follow.
+     */
+    #togglePanelRequired(panel: Field, hidden: boolean, saved: WeakMap<Field, boolean>): void {
+        const seen = new Set<FormControl>()
+        for (const control of panel.inputs) {
+            if (seen.has(control)) {
+                continue
+            }
+
+            // A radio's field holds its whole group
+            const field = this.resolve(control)
+            for (const input of field.inputs) {
+                seen.add(input)
+            }
+
+            if (hidden) {
+                if (!saved.has(field)) {
+                    saved.set(field, field.required)
+                }
+                field.setRequired(false)
+            } else if (saved.has(field)) {
+                field.setRequired(saved.get(field) as boolean)
+                saved.delete(field)
+            }
+        }
+    }
+
     #resolveFor(target: FieldTarget, rule: number, role: string): Field {
         try {
             const field = this.resolve(target)
@@ -223,4 +286,12 @@ export class FormDefinition<S = AnyShape> {
 
         return element
     }
+}
+
+/**
+ * A block holding several fields: controls of several names. An expanded
+ * choice is one field, its options share a name.
+ */
+function isPanel(field: Field): boolean {
+    return !isControl(field.element) && new Set(field.inputs.map((input) => input.name.replace(/\[\]$/, ''))).size > 1
 }
