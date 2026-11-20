@@ -457,7 +457,9 @@ the rule it belongs to: `Cannot resolve the "show" target of rule #2: No field "
 
 Rules follow values set by code too, since `setValue()` notifies, and they cascade: a field a rule empties feeds the
 rules that read it. A hidden target is never required (the browser would block the submit on a field nobody can see);
-shown again, it is required as its `.require()` rules say, else as Symfony rendered it.
+shown again, it is required as its `.require()` rules say, else as Symfony rendered it. A `block()` holding several fields
+(a panel) makes none of them required while hidden, and gives each its own state back once shown; a field inside with
+rules of its own keeps them. Require the fields of a panel, not the panel: `apply()` refuses it.
 
 **Values.** `getElementValue` / `setElementValue` read and write a single control (checkbox → boolean, radio → its
 group's value, multiple select → array). They only touch the native control: a widget that took it over is driven

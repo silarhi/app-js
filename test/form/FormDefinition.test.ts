@@ -313,6 +313,90 @@ describe('FormDefinition', () => {
         expect($('label').classList.contains('required')).toBe(true)
     })
 
+    it('restores each field of a block as it was rendered, labels included', () => {
+        document.body.insertAdjacentHTML(
+            'beforeend',
+            `<div id="panel">
+                <div class="form-group"><label class="required">First</label><input id="p_first" name="p[first]" required></div>
+                <div class="form-group"><label>Birth</label><input id="p_birth" name="p[birth]"></div>
+                <fieldset class="form-group">
+                    <legend>Size</legend>
+                    <div id="p_size">
+                        <input id="p_size_0" name="p[size]" type="radio" value="s">
+                        <input id="p_size_1" name="p[size]" type="radio" value="m">
+                    </div>
+                </fieldset>
+            </div>`
+        )
+        const label = (id: string): Element => group(id).querySelector('label, legend') as Element
+        new FormDefinition().when('f_vat').isChecked().show(block('panel')).apply()
+
+        expect($('#panel').classList.contains('hidden')).toBe(true)
+        expect($('#p_first').required).toBe(false)
+        expect($('#p_birth').required).toBe(false)
+
+        check('f_vat')
+
+        expect($('#p_first').required).toBe(true)
+        expect(label('p_first').classList.contains('required')).toBe(true)
+        expect($('#p_birth').required).toBe(false)
+        expect(label('p_birth').classList.contains('required')).toBe(false)
+        expect($('#p_size_0').required).toBe(false)
+        expect(label('p_size').classList.contains('required')).toBe(false)
+    })
+
+    it('keeps the rule of a field inside a block, never required while the block is hidden', () => {
+        document.body.insertAdjacentHTML(
+            'beforeend',
+            `<div id="panel">
+                <div class="form-group"><label>First</label><input id="p_first" name="p[first]"></div>
+                <div class="form-group"><label>Birth</label><input id="p_birth" name="p[birth]"></div>
+            </div>`
+        )
+        const definition = new FormDefinition()
+        definition.when('f_vat').isChecked().show(block('panel'))
+        definition.when('f_name').equals('x').require('p_first')
+        definition.apply()
+
+        type('f_name', 'x')
+        expect($('#p_first').required).toBe(false)
+
+        check('f_vat')
+        expect($('#p_first').required).toBe(true)
+        expect($('#p_birth').required).toBe(false)
+
+        type('f_name', '')
+        expect($('#p_first').required).toBe(false)
+    })
+
+    it('hides the fields of a block through their bindings', () => {
+        document.body.insertAdjacentHTML(
+            'beforeend',
+            '<div id="panel"><input id="p_first" name="p[first]" required><input id="p_birth" name="p[birth]"></div>'
+        )
+        const setRequired = vi.fn(({ next }: { next: () => void }) => next())
+        bindField($('#p_first'), { setRequired })
+        new FormDefinition().when('f_vat').isChecked().show(block('panel')).apply()
+
+        expect(setRequired).toHaveBeenCalledWith(expect.objectContaining({ required: false }))
+
+        check('f_vat')
+
+        expect(setRequired).toHaveBeenLastCalledWith(expect.objectContaining({ required: true }))
+        expect($('#p_first').required).toBe(true)
+    })
+
+    it('refuses to require a block holding several fields', () => {
+        document.body.insertAdjacentHTML(
+            'beforeend',
+            '<div id="panel"><input id="p_first" name="p[first]"><input id="p_birth" name="p[birth]"></div>'
+        )
+        const definition = new FormDefinition()
+        definition.when('f_vat').isChecked().require(block('panel'))
+
+        expect(() => definition.apply()).toThrow('holds several fields')
+    })
+
     it('lets a hide rule drop what a require rule asks', () => {
         const definition = new FormDefinition()
         definition.when('f_vat').isChecked().require('f_date')
