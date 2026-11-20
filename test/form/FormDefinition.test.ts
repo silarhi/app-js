@@ -484,6 +484,78 @@ describe('FormDefinition', () => {
         expect($('#p_first').disabled).toBe(true)
     })
 
+    it('leaves the fields of a shown panel to other code between its changes', () => {
+        document.body.insertAdjacentHTML(
+            'beforeend',
+            `<div id="panel">
+                <div class="form-group"><input id="p_first" name="p[first]"></div>
+                <div class="form-group"><input id="p_birth" name="p[birth]"></div>
+            </div>`
+        )
+        const definition = new FormDefinition()
+        definition.when('f_vat').isChecked().show(block('panel'))
+        definition.when('f_name').equals('x').disable(block('panel'))
+        definition.apply()
+
+        check('f_vat')
+        $('#p_birth').required = true
+        $('#p_first').disabled = true
+        type('f_other', 'y')
+        type('f_name', 'z')
+
+        expect($('#p_birth').required).toBe(true)
+        expect($('#p_first').disabled).toBe(true)
+
+        check('f_vat', false)
+        expect($('#p_birth').required).toBe(false)
+    })
+
+    it('takes an embedded form as a panel', () => {
+        document.body.insertAdjacentHTML(
+            'beforeend',
+            `<div id="f_address">
+                <div class="form-group"><label class="required">City</label><input id="f_address_city" name="f[address][city]" required></div>
+                <div class="form-group"><label>Zip</label><input id="f_address_zip" name="f[address][zip]"></div>
+            </div>`
+        )
+        const form = formView('f')
+        new FormDefinition({ form })
+            .when('vat')
+            .isChecked()
+            .show(block(form.get('address')))
+            .apply()
+
+        expect($('#f_address').classList.contains('hidden')).toBe(true)
+        expect($('#f_address_city').required).toBe(false)
+
+        check('f_vat')
+
+        expect($('#f_address_city').required).toBe(true)
+        expect($('#f_address_zip').required).toBe(false)
+    })
+
+    it('reads the fields of a panel through its form, as its paths do', () => {
+        document.body.insertAdjacentHTML(
+            'beforeend',
+            `<div id="panel">
+                <div class="form-group"><input id="f_first" name="f[first]"></div>
+                <div class="form-group"><input id="f_birth" name="f[birth]"></div>
+            </div>`
+        )
+        const form = formView('f')
+        const definition = new FormDefinition({ form })
+        definition
+            .when('vat')
+            .isChecked()
+            .show(block($('#panel')))
+        const field = vi.spyOn(form, 'field')
+        definition.apply()
+
+        expect(field).toHaveBeenCalledWith('first')
+        expect(field).toHaveBeenCalledWith('birth')
+        expect(definition.resolve(form.get('first'))).toBe(form.field('first'))
+    })
+
     it('refuses to require a block holding several fields', () => {
         document.body.insertAdjacentHTML(
             'beforeend',
