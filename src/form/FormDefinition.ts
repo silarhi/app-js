@@ -46,12 +46,14 @@ export interface FormDefinitionOptions<S = AnyShape> {
  * - `.empty()` clears the target while its rule matches.
  * - A hidden target is never required; shown, it is required as its
  *   `.require()` rules say, else as it was rendered.
- * - A block holding several fields (a panel) hides them all: none is
- *   required while it is hidden, each is back as it was rendered once shown.
- *   Require its fields, not the panel.
+ * - A block that is not one field (a panel: several fields, an embedded
+ *   form) hides them all: none is required while it is hidden, each is back
+ *   as it was rendered once shown. Require its fields, not the panel.
  * - Disabling or emptying a panel goes through each of its fields, so their
  *   bindings follow. Enabled again, a field rendered disabled stays so; a
  *   field's own rules, applied after, have the last word.
+ * - A panel writes its fields only when it is hidden, shown, disabled or
+ *   enabled: what other code set on them meanwhile stays.
  */
 export class FormDefinition<S = AnyShape> {
     readonly #rules: Rule[] = []
@@ -136,6 +138,14 @@ export class FormDefinition<S = AnyShape> {
         // Panels first: the rules of the fields inside, applied after, have the last word
         const ordered = [...targets].sort(([a], [b]) => Number(panels.has(b)) - Number(panels.has(a)))
 
+        // What each panel last wrote on its fields: it writes again only on a change
+        const written = new Map<Field, { hidden?: boolean; disabled?: boolean }>()
+        const changed = (panel: Field, key: 'hidden' | 'disabled', value: boolean): boolean => {
+            const last = written.get(panel) ?? {}
+            written.set(panel, { ...last, [key]: value })
+            return last[key] !== value
+        }
+
         const pass = (): void => {
             const hiddenPanels: Element[] = []
             for (const [field, kinds] of ordered) {
@@ -156,9 +166,11 @@ export class FormDefinition<S = AnyShape> {
                         const disabled = matches(disable)
                         if (panels.has(field)) {
                             // Enabled again, a field rendered disabled stays so
-                            this.#eachPanelField(field, (inner) =>
-                                inner.setDisabled(disabled || rendered(inner).disabled)
-                            )
+                            if (changed(field, 'disabled', disabled)) {
+                                this.#eachPanelField(field, (inner) =>
+                                    inner.setDisabled(disabled || rendered(inner).disabled)
+                                )
+                            }
                         } else {
                             field.setDisabled(disabled)
                         }
@@ -180,7 +192,11 @@ export class FormDefinition<S = AnyShape> {
                             hiddenPanels.push(field.element as Element)
                         }
                         // Through each field, so bindings and labels follow
-                        this.#eachPanelField(field, (inner) => inner.setRequired(!hidden && rendered(inner).required))
+                        if (changed(field, 'hidden', hidden)) {
+                            this.#eachPanelField(field, (inner) =>
+                                inner.setRequired(!hidden && rendered(inner).required)
+                            )
+                        }
                     }
                     continue
                 }
@@ -265,18 +281,37 @@ export class FormDefinition<S = AnyShape> {
     /** Each field of a panel once, as the definition resolves it. */
     #eachPanelField(panel: Field, apply: (field: Field) => void): void {
         const seen = new Set<FormControl>()
-        for (const control of panel.inputs) {
+        for (const control of controlsUnder(panel.element as Element)) {
             if (seen.has(control)) {
                 continue
             }
 
             // A radio's field holds its whole group
-            const field = this.resolve(control)
+            const field = this.#fieldOf(control)
             for (const input of field.inputs) {
                 seen.add(input)
             }
             apply(field)
         }
+    }
+
+    /**
+     * The field of a control: through the definition's form when it names it,
+     * so a field a rule targets by path and the same field inside a panel are
+     * one `Field`; by its element otherwise.
+     */
+    #fieldOf(control: FormControl): Field {
+        const form = this.#options.form as FormView | undefined
+        const prefix = form?.fullName ? `${form.fullName}[` : null
+        const name = control.name.replace(/\[\]$/, '')
+        if (form && prefix && name.startsWith(prefix) && name.endsWith(']')) {
+            const path = name.slice(prefix.length, -1).split('][').join('.')
+            if (form.has(path)) {
+                return form.field(path)
+            }
+        }
+
+        return this.resolve(control)
     }
 
     #resolveFor(target: FieldTarget, rule: number, role: string): Field {
@@ -304,9 +339,26 @@ export class FormDefinition<S = AnyShape> {
 }
 
 /**
- * A block holding several fields: controls of several names. An expanded
- * choice is one field, its options share a name.
+ * A block that is not one field: an element holding controls besides the
+ * field's own (an embedded form, a panel of fields) or of several names. A
+ * control, an empty block or an expanded choice (its options share a name)
+ * is one field.
  */
 function isPanel(field: Field): boolean {
-    return !isControl(field.element) && new Set(field.inputs.map((input) => input.name.replace(/\[\]$/, ''))).size > 1
+    const element = field.element
+    if (!element || isControl(element)) {
+        return false
+    }
+
+    const controls = controlsUnder(element)
+    const own = new Set(field.inputs)
+
+    return (
+        controls.some((control) => !own.has(control)) ||
+        new Set(controls.map((control) => control.name.replace(/\[\]$/, ''))).size > 1
+    )
+}
+
+function controlsUnder(element: Element): FormControl[] {
+    return [...element.querySelectorAll<FormControl>('input, select, textarea')]
 }
