@@ -47,7 +47,7 @@ export interface FormDefinitionOptions<S = AnyShape> {
  * - A hidden target is never required; shown, it is required as its
  *   `.require()` rules say, else as it was rendered.
  * - A block holding several fields (a panel) hides them all: none is
- *   required while it is hidden, each gets its own state back once shown.
+ *   required while it is hidden, each is back as it was rendered once shown.
  *   Require its fields, not the panel.
  * - Disabling or emptying a panel goes through each of its fields, so their
  *   bindings follow. Enabled again, a field rendered disabled stays so; a
@@ -113,19 +113,28 @@ export class FormDefinition<S = AnyShape> {
         })
 
         const matches = (tests: Array<() => boolean>): boolean => tests.some((test) => test())
-        // Symfony renders fields required by default: remember it, to restore
-        // what a hidden field loses
-        const rendered = new Map<Field, boolean>()
+        // How each field was rendered (Symfony renders them required by
+        // default), to give back what the rules take away. Taken before the
+        // first pass; a field added to a panel later, when first seen.
+        const initial = new Map<Field, { required: boolean; disabled: boolean }>()
+        const rendered = (field: Field): { required: boolean; disabled: boolean } => {
+            let state = initial.get(field)
+            if (!state) {
+                state = { required: field.required, disabled: field.disabled }
+                initial.set(field, state)
+            }
+            return state
+        }
         for (const field of targets.keys()) {
-            rendered.set(field, field.required)
+            if (panels.has(field)) {
+                this.#eachPanelField(field, rendered)
+            } else {
+                rendered(field)
+            }
         }
 
         // Panels first: the rules of the fields inside, applied after, have the last word
         const ordered = [...targets].sort(([a], [b]) => Number(panels.has(b)) - Number(panels.has(a)))
-        // What a hidden panel took from its fields, given back once it is shown
-        const saved = new WeakMap<Field, boolean>()
-        // A field of a panel rendered disabled stays so once the panel is enabled
-        const renderedDisabled = new Map<Field, boolean>()
 
         const pass = (): void => {
             const hiddenPanels: Element[] = []
@@ -146,12 +155,10 @@ export class FormDefinition<S = AnyShape> {
                     if (disable.length > 0) {
                         const disabled = matches(disable)
                         if (panels.has(field)) {
-                            this.#eachPanelField(field, (inner) => {
-                                if (!renderedDisabled.has(inner)) {
-                                    renderedDisabled.set(inner, inner.disabled)
-                                }
-                                inner.setDisabled(disabled || (renderedDisabled.get(inner) as boolean))
-                            })
+                            // Enabled again, a field rendered disabled stays so
+                            this.#eachPanelField(field, (inner) =>
+                                inner.setDisabled(disabled || rendered(inner).disabled)
+                            )
                         } else {
                             field.setDisabled(disabled)
                         }
@@ -172,7 +179,8 @@ export class FormDefinition<S = AnyShape> {
                         if (hidden) {
                             hiddenPanels.push(field.element as Element)
                         }
-                        this.#togglePanelRequired(field, hidden, saved)
+                        // Through each field, so bindings and labels follow
+                        this.#eachPanelField(field, (inner) => inner.setRequired(!hidden && rendered(inner).required))
                     }
                     continue
                 }
@@ -180,7 +188,7 @@ export class FormDefinition<S = AnyShape> {
                 const anchor = field.element ?? field.inputs[0]
                 hidden ||= hiddenPanels.some((panel) => anchor !== undefined && panel.contains(anchor))
                 if (required !== undefined || toggled) {
-                    field.setRequired(!hidden && (required ?? rendered.get(field) ?? false))
+                    field.setRequired(!hidden && (required ?? rendered(field).required))
                 }
             }
         }
@@ -252,24 +260,6 @@ export class FormDefinition<S = AnyShape> {
         }
 
         return field
-    }
-
-    /**
-     * Hidden, none of a panel's fields is required; shown, each gets back the
-     * state it had before. Through each field, so bindings and labels follow.
-     */
-    #togglePanelRequired(panel: Field, hidden: boolean, saved: WeakMap<Field, boolean>): void {
-        this.#eachPanelField(panel, (field) => {
-            if (hidden) {
-                if (!saved.has(field)) {
-                    saved.set(field, field.required)
-                }
-                field.setRequired(false)
-            } else if (saved.has(field)) {
-                field.setRequired(saved.get(field) as boolean)
-                saved.delete(field)
-            }
-        })
     }
 
     /** Each field of a panel once, as the definition resolves it. */
