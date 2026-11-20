@@ -386,6 +386,104 @@ describe('FormDefinition', () => {
         expect($('#p_first').required).toBe(true)
     })
 
+    it('disables and empties the fields of a block one by one', () => {
+        document.body.insertAdjacentHTML(
+            'beforeend',
+            `<div id="panel">
+                <div class="form-group"><input id="p_first" name="p[first]" value="Ada"></div>
+                <div class="form-group">
+                    <div id="p_size">
+                        <input id="p_size_0" name="p[size]" type="radio" value="s" checked>
+                        <input id="p_size_1" name="p[size]" type="radio" value="m">
+                    </div>
+                </div>
+            </div>`
+        )
+        const definition = new FormDefinition()
+        definition.when('f_vat').isChecked().disable(block('panel'))
+        definition.when('f_name').equals('x').empty(block('panel'))
+        definition.apply()
+
+        expect($('#p_first').disabled).toBe(false)
+        expect($('#p_size_0').disabled).toBe(false)
+
+        check('f_vat')
+        expect($('#p_first').disabled).toBe(true)
+        expect($('#p_size_0').disabled).toBe(true)
+        expect($('#p_size_1').disabled).toBe(true)
+
+        check('f_vat', false)
+        expect($('#p_first').disabled).toBe(false)
+        expect($('#p_size_1').disabled).toBe(false)
+
+        type('f_name', 'x')
+        expect($('#p_first').value).toBe('')
+        expect($('#p_size_0').checked).toBe(false)
+    })
+
+    it('disables and empties the fields of a block through their bindings', () => {
+        document.body.insertAdjacentHTML(
+            'beforeend',
+            '<div id="panel"><input id="p_first" name="p[first]"><input id="p_birth" name="p[birth]" value="1990"></div>'
+        )
+        // A widget standing in for the input, as tom-select does: it writes the input itself
+        const setDisabled = vi.fn(({ disabled }: { disabled: boolean }) => {
+            $('#p_birth').disabled = disabled
+        })
+        const setValue = vi.fn(({ value }: { value: unknown }) => {
+            $('#p_birth').value = value === null ? '' : String(value)
+        })
+        bindField($('#p_birth'), { setDisabled, setValue })
+        const definition = new FormDefinition()
+        definition.when('f_vat').isChecked().disable(block('panel'))
+        definition.when('f_name').equals('x').empty(block('panel'))
+        definition.apply()
+
+        check('f_vat')
+        expect(setDisabled).toHaveBeenLastCalledWith(expect.objectContaining({ disabled: true }))
+        expect($('#p_first').disabled).toBe(true)
+        expect($('#p_birth').disabled).toBe(true)
+
+        type('f_name', 'x')
+        expect(setValue).toHaveBeenCalledWith(expect.objectContaining({ value: null }))
+        expect($('#p_birth').value).toBe('')
+    })
+
+    it('keeps a field of a block rendered disabled once the block is enabled', () => {
+        document.body.insertAdjacentHTML(
+            'beforeend',
+            '<div id="panel"><input id="p_first" name="p[first]"><input id="p_birth" name="p[birth]" disabled></div>'
+        )
+        new FormDefinition().when('f_vat').isChecked().disable(block('panel')).apply()
+
+        expect($('#p_first').disabled).toBe(false)
+        expect($('#p_birth').disabled).toBe(true)
+
+        check('f_vat')
+        check('f_vat', false)
+
+        expect($('#p_first').disabled).toBe(false)
+        expect($('#p_birth').disabled).toBe(true)
+    })
+
+    it('lets the disable rule of a field inside a block have the last word', () => {
+        document.body.insertAdjacentHTML(
+            'beforeend',
+            '<div id="panel"><input id="p_first" name="p[first]"><input id="p_birth" name="p[birth]"></div>'
+        )
+        const definition = new FormDefinition()
+        definition.when('f_name').equals('x').disable('p_first')
+        definition.when('f_vat').isChecked().disable(block('panel'))
+        definition.apply()
+
+        check('f_vat')
+        expect($('#p_first').disabled).toBe(false)
+        expect($('#p_birth').disabled).toBe(true)
+
+        type('f_name', 'x')
+        expect($('#p_first').disabled).toBe(true)
+    })
+
     it('refuses to require a block holding several fields', () => {
         document.body.insertAdjacentHTML(
             'beforeend',

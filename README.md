@@ -459,7 +459,9 @@ Rules follow values set by code too, since `setValue()` notifies, and they casca
 rules that read it. A hidden target is never required (the browser would block the submit on a field nobody can see);
 shown again, it is required as its `.require()` rules say, else as Symfony rendered it. A `block()` holding several fields
 (a panel) makes none of them required while hidden, and gives each its own state back once shown; a field inside with
-rules of its own keeps them. Require the fields of a panel, not the panel: `apply()` refuses it.
+rules of its own keeps them. Require the fields of a panel, not the panel: `apply()` refuses it. Disabling or emptying a
+panel goes through each field inside, so a `bindField()` widget (tom-select…) and the theme follow; enabled again, a
+field rendered disabled stays so, and a field's own `.disable()` rules have the last word.
 
 **Values.** `getElementValue` / `setElementValue` read and write a single control (checkbox → boolean, radio → its
 group's value, multiple select → array). They only touch the native control: a widget that took it over is driven
