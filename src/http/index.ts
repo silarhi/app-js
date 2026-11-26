@@ -44,6 +44,35 @@ export function errorBody<T extends object>(error: unknown): Partial<T> | undefi
     return error.body as Partial<T>
 }
 
+/**
+ * A form error as Symfony's `FormViolationsResponse` of silarhi/app-js-bundle
+ * answers it: `path` is the dot path `formView()` reads (`phones.0.number`),
+ * `''` for the form itself.
+ */
+export interface FormViolation {
+    readonly path: string
+    readonly message: string
+}
+
+/**
+ * The violations a failed request answered (`{"violations": [{path, message}]}`),
+ * checked: `[]` when it answered anything else, or got no answer.
+ */
+export function violationsOf(error: unknown): FormViolation[] {
+    const violations = errorBody<{ violations: unknown }>(error)?.violations
+    if (!Array.isArray(violations)) {
+        return []
+    }
+
+    return violations.filter(
+        (violation: unknown): violation is FormViolation =>
+            violation !== null &&
+            typeof violation === 'object' &&
+            typeof (violation as Record<string, unknown>).path === 'string' &&
+            typeof (violation as Record<string, unknown>).message === 'string'
+    )
+}
+
 export type QueryParams = Record<string, string | number | boolean | null | undefined>
 
 export interface JsonRequestInit extends RequestInit {

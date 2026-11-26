@@ -515,7 +515,7 @@ persistent element the next page dropped is disconnected by the next unmount.
 ### HTTP
 
 ```js
-import { errorBody, getHtml, getJson, postForm, sendJson, statusOf } from '@silarhi/app-js/http'
+import { errorBody, getHtml, getJson, postForm, sendJson, statusOf, violationsOf } from '@silarhi/app-js/http'
 
 const html = await getHtml(link.href) // then appendHTML() and app.mount() it
 const events = await getJson('/api/events', { params: { city: 'toulouse', page: 2 } })
@@ -525,14 +525,16 @@ await postForm(form.action, form) // multipart, as the browser sends it, files i
 
 Every request carries `X-Requested-With: XMLHttpRequest`, so `Request::isXmlHttpRequest()` can answer a fragment.
 An answer outside 2xx rejects with an `HttpError` holding its `status` and its `body`: parsed when it is JSON, else its
-text (the form a 422 renders again, to put back in the page). `errorBody()` reads a JSON one:
+text (the form a 422 renders again, to put back in the page). `errorBody()` reads a JSON one, as the server describes
+it (unchecked), and `violationsOf()` the `{"violations": [{path, message}]}` of a refused form, checked (`[]` for any
+other answer):
 
 ```js
 try {
     await postForm('/register', form)
 } catch (error) {
     if (statusOf(error) === 422) {
-        showViolations(errorBody(error)?.violations) // the server's JSON, unchecked
+        showViolations(violationsOf(error)) // [{ path, message }], checked
     } else if (statusOf(error) === 0) {
         // no answer at all: offline, blocked
     }

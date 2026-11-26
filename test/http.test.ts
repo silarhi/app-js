@@ -8,7 +8,17 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { errorBody, getHtml, getJson, HttpError, postForm, request, sendJson, statusOf } from '../src/http'
+import {
+    errorBody,
+    getHtml,
+    getJson,
+    HttpError,
+    postForm,
+    request,
+    sendJson,
+    statusOf,
+    violationsOf,
+} from '../src/http'
 
 const json = (body: unknown, status = 200, type = 'application/json'): Response =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': type } })
@@ -130,5 +140,45 @@ describe('postForm', () => {
 
         expect(await postForm('/events/42/remind')).toBeNull()
         expect(sent().init.body).toBeUndefined()
+    })
+})
+
+describe('violationsOf', () => {
+    it('reads the violations a FormViolationsResponse answers', async () => {
+        fetchMock.mockResolvedValue(
+            json(
+                {
+                    violations: [
+                        { path: 'phones.0.number', message: 'Not valid.' },
+                        { path: '', message: 'Refused.' },
+                    ],
+                },
+                422
+            )
+        )
+
+        const error = await postForm('/party').catch((caught: unknown) => caught)
+
+        expect(violationsOf(error)).toEqual([
+            { path: 'phones.0.number', message: 'Not valid.' },
+            { path: '', message: 'Refused.' },
+        ])
+    })
+
+    it('leaves out what is no violation', async () => {
+        fetchMock.mockResolvedValue(
+            json({ violations: [{ path: 'name' }, null, 'oops', { path: 'name', message: 'Too short.' }] }, 422)
+        )
+
+        expect(violationsOf(await postForm('/party').catch((caught: unknown) => caught))).toEqual([
+            { path: 'name', message: 'Too short.' },
+        ])
+    })
+
+    it('is empty for any other answer, or none', async () => {
+        fetchMock.mockResolvedValue(json({ violations: 'none' }, 422))
+        expect(violationsOf(await postForm('/party').catch((caught: unknown) => caught))).toEqual([])
+        expect(violationsOf(new HttpError(500, '<html>'))).toEqual([])
+        expect(violationsOf(new TypeError('Failed to fetch'))).toEqual([])
     })
 })
