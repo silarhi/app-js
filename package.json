@@ -1,6 +1,6 @@
 {
     "name": "@silarhi/app-js",
-    "description": "Tiny, framework-agnostic front-end orchestrator — boot-once modules, per-element listeners with cleanups, and lazy page initializers for server-rendered apps",
+    "description": "Tiny, framework-agnostic front-end orchestrator: boot-once modules, per-element listeners with cleanups, and lazy page initializers for server-rendered apps",
     "version": "0.0.0-development",
     "license": "MIT",
     "author": "SILARHI <dev@silarhi.fr>",
