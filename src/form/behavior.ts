@@ -75,6 +75,16 @@ export interface FieldBehavior {
     setVisible?: Part<{ element: Element; visible: boolean }, void>
     /** Show on the label that the field is required. */
     markRequired?: Part<{ label: Element; required: boolean }, void>
+    /**
+     * Show the errors the server refused the field with; returns their removal, or `null` when the field has nowhere
+     * to show them (an embedded form rendered without its wrapper), so they go with the errors of the form.
+     */
+    showErrors?: Part<{ messages: readonly string[] }, Cleanup | null>
+    /**
+     * Show the errors of the form itself, run on its root field: `container` is where they go, the one given to
+     * `showViolations()` or the form's own element, `null` when there is none. Returns their removal.
+     */
+    showFormErrors?: Part<{ messages: readonly string[]; container: Element | null }, Cleanup>
 }
 
 export type PartName = keyof FieldBehavior
