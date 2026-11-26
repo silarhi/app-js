@@ -223,6 +223,19 @@ export class Field<E extends Element = Element, V extends FieldValue = FieldValu
     }
 
     /**
+     * Show errors the server refused the field with; returns their removal, or `null` when the field has nowhere to
+     * show them. `showViolations()` shows them all and drops them once the field is edited again.
+     */
+    showErrors(messages: readonly string[]): Cleanup | null {
+        return this.#run('showErrors', { messages })
+    }
+
+    /** Show the errors of the form this field is the root of, in `container`; returns their removal. */
+    showFormErrors(messages: readonly string[], container: Element | null): Cleanup {
+        return this.#run('showFormErrors', { messages, container })
+    }
+
+    /**
      * Run one part through the levels: the first that implements it answers,
      * and its `next()` hands over to the level below. The only place a field
      * chooses between them.

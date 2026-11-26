@@ -53,4 +53,6 @@ export type {
 } from './shape'
 export type { FieldValue, FormControl } from './values'
 export { getElementValue, radioGroup, setElementValue } from './values'
+export type { ViolationsOptions } from './violations'
+export { showViolations } from './violations'
 export type { WhenBuilder } from './WhenBuilder'

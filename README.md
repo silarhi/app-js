@@ -8,7 +8,8 @@ Turbo required.
   the optional returned cleanup runs on `app.unmount(container)`
 - **Pages** — lazy initializers declared in markup (`data-page`), each shipped in its own chunk
 - **Services** — a lazy container with typed ids and Symfony's services / parameters split
-- **Forms** (`@silarhi/app-js/form`) — Symfony form collections, dependent-field rules, value helpers
+- **Forms** (`@silarhi/app-js/form`) — Symfony form collections, dependent-field rules, value helpers, server
+  violations
 - **HTTP** (`@silarhi/app-js/http`) — `fetch()` helpers that speak Symfony's AJAX conventions
 - **Ready-made listeners** (`@silarhi/app-js/listeners`) — autosubmit, submit-once, check-all, password toggle,
   copy to clipboard, passkeys
@@ -313,8 +314,9 @@ behavior, the native level having written the `<option>`s.
 
 **Behaviors.** Each operation of a field is a part of a `FieldBehavior`: `getValue`, `setValue`, `isRequired`,
 `setRequired`, `isDisabled`, `setDisabled`, `getOptions`, `setOptions`, `addOption`, `removeOption`,
-`setOptionDisabled`, `setPlaceholder` and `on` for the control; `group`, `label`, `setVisible` and `markRequired`
-for the markup. A field resolves each part on every call through four levels, the first that implements it winning:
+`setOptionDisabled`, `setPlaceholder` and `on` for the control; `group`, `label`, `setVisible`, `markRequired`,
+`showErrors` and `showFormErrors` for the markup. A field resolves each part on every call through four levels, the
+first that implements it winning:
 
 | Level   | Set with                             | For                                                          |
 | ------- | ------------------------------------ | ------------------------------------------------------------ |
@@ -373,8 +375,9 @@ formView(id, { field: { behavior } }) // every field of the form; same `field` o
 A part left out falls to the level below, so a tom-select binding that only takes over `setRequired` still gets its
 label marked by `markRequired`. Bind the control, or an expanded choice's container. The app defaults are read on
 every call: `setFieldDefaults()` replaces them and returns their restoration. `bootstrapTheme({ groupSelector,
-hiddenClass, requiredClass })` returns the markup parts; the native level uses its defaults (`.form-group`, a `hidden`
-class, a `required` label class), and its `label` looks in `field.group`, so a `group` from any level moves it too.
+hiddenClass, requiredClass, invalidClass, feedbackClass, alertClass })` returns the markup parts; the native level uses
+its defaults (`.form-group`, a `hidden` class, a `required` label class, Bootstrap 5's error classes), and its `label`
+looks in `field.group`, so a `group` from any level moves it too.
 
 **Collections.** `CollectionManager` adds items from `data-prototype` and removes them, mounting new items and
 unmounting removed ones. It is a service like any other, given its app; `collectionListener(id)` hands it the add and
@@ -488,6 +491,51 @@ existing names in `suggestions`, so an optional field can be told apart from a t
 source or target throws a `FormRuleError` from `apply()`, with the 1-based `rule`, its `role` (`source`, `show`,
 `require`…) and the underlying error as `cause`.
 
+**Violations.** `showViolations(form, violations)` shows the errors a submission was refused with, through the
+`showErrors` part of each field and the `showFormErrors` part of the form. By default they are rendered as Symfony's
+Bootstrap 5 theme renders them: `is-invalid` on the controls of each field and an `invalid-feedback` message after it
+(after its `.input-group`, or the `.form-check` of a checkbox; inside the container of an expanded choice), the errors
+of the form itself (`path: ''`) as `alert`s first in its element. It returns their removal:
+
+```js
+import { on } from '@silarhi/app-js'
+import { formView, showViolations } from '@silarhi/app-js/form'
+import { postForm, violationsOf } from '@silarhi/app-js/http'
+
+let clear = () => {}
+on(element, 'submit', async (event) => {
+    event.preventDefault()
+    clear()
+    try {
+        await postForm(element.action, element)
+    } catch (error) {
+        clear = showViolations(formView(element), violationsOf(error))
+    }
+})
+```
+
+A path is a `formView()` one (`phones.0.number`), as silarhi/app-js-bundle's `FormViolationsResponse` answers it. A
+path no longer rendered, or an embedded form rendered without its wrapper, goes with the errors of the form; a field
+edited again drops its own; a control the server rendered invalid stays so. The messages are text, never markup.
+`container` puts the errors of the form elsewhere. Another theme configures the classes, or replaces the parts, at any
+level:
+
+```js
+// The app: other classes, and the errors of the form as toasts
+setFieldDefaults(bootstrapTheme({ invalidClass: 'error', feedbackClass: 'help is-danger' }), {
+    showFormErrors: ({ messages }) => {
+        const toasts = messages.map((message) => toast(message))
+        return () => toasts.forEach((toast) => toast.dismiss())
+    },
+})
+
+// A library that hides the control: the errors go under its own wrapper
+bindField(select, { showErrors: ({ messages }) => showUnder(ts.wrapper, messages) })
+```
+
+`showErrors` returns the removal, or `null` when the field has nowhere to show them, which sends them to the form's.
+`field.showErrors(messages)` runs it on its own, without the clearing on edit.
+
 ### With Hotwire Turbo
 
 Drive `mount` / `unmount` from [`@silarhi/turbo`](https://www.npmjs.com/package/@silarhi/turbo):
@@ -527,14 +575,14 @@ Every request carries `X-Requested-With: XMLHttpRequest`, so `Request::isXmlHttp
 An answer outside 2xx rejects with an `HttpError` holding its `status` and its `body`: parsed when it is JSON, else its
 text (the form a 422 renders again, to put back in the page). `errorBody()` reads a JSON one, as the server describes
 it (unchecked), and `violationsOf()` the `{"violations": [{path, message}]}` of a refused form, checked (`[]` for any
-other answer):
+other answer), for `showViolations()`:
 
 ```js
 try {
     await postForm('/register', form)
 } catch (error) {
     if (statusOf(error) === 422) {
-        showViolations(violationsOf(error)) // [{ path, message }], checked
+        clear = showViolations(formView(form), violationsOf(error))
     } else if (statusOf(error) === 0) {
         // no answer at all: offline, blocked
     }
