@@ -147,11 +147,8 @@ export class Container {
             const instance = factory(this)
             this.#instances.set(id, instance)
             if (instance instanceof Promise) {
-                instance.catch(() => {
-                    if (this.#instances.get(id) === instance) {
-                        this.#instances.delete(id)
-                    }
-                })
+                // Nothing replaces an instance before it settles: a rejected one is always the current one
+                instance.catch(() => this.#instances.delete(id))
             }
 
             return instance

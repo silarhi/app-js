@@ -71,6 +71,21 @@ describe('request', () => {
         expect(errorBody(error)).toBeUndefined()
     })
 
+    it('rejects with no body a failed answer whose JSON is invalid', async () => {
+        fetchMock.mockResolvedValue(
+            new Response('<h1>Internal Server Error</h1>', {
+                status: 500,
+                headers: { 'Content-Type': 'application/json' },
+            })
+        )
+
+        const error = await request('/api/events').catch((caught: unknown) => caught)
+
+        expect(error).toBeInstanceOf(HttpError)
+        expect(statusOf(error)).toBe(500)
+        expect((error as HttpError).body).toBeUndefined()
+    })
+
     it('takes a request that got no answer as status 0', async () => {
         fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
 

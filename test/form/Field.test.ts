@@ -397,6 +397,14 @@ describe('options', () => {
         expect($('#c').hasAttribute('placeholder')).toBe(false)
     })
 
+    it('leaves the options of a select without an empty one', () => {
+        document.body.innerHTML = '<select id="s"><option value="a">A</option></select>'
+
+        new Field($('#s')).setPlaceholder('Choose')
+
+        expect(texts()).toEqual(['A'])
+    })
+
     it('needs a select to change the choices', () => {
         document.body.innerHTML =
             '<div id="r"><input type="radio" name="r" value="a"><input type="radio" name="r" value="b"></div><input id="t">'

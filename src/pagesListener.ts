@@ -13,8 +13,8 @@ import type { Cleanup, Listener } from './types'
  * Parse `data-page`: a JSON array of page ids (`'["foo","bar"]'`, what a
  * server-side helper emits) or a single bare id (`"foo"`).
  */
-function parsePageIds(value: string | undefined): string[] {
-    const trimmed = value?.trim() ?? ''
+function parsePageIds(value: string): string[] {
+    const trimmed = value.trim()
     if (trimmed === '') {
         return []
     }
@@ -44,7 +44,7 @@ function parsePageIds(value: string | undefined): string[] {
 export const pagesListener: Listener<HTMLElement> = {
     selector: '[data-page]',
     connect(element, { app }) {
-        const ids = parsePageIds(element.dataset.page)
+        const ids = parsePageIds(element.dataset.page as string)
         const params: Record<string, unknown> = JSON.parse(element.dataset.pageParams || '{}')
         const cleanups: Cleanup[] = []
         let disconnected = false

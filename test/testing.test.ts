@@ -114,6 +114,10 @@ describe('connectListener', () => {
         const element = document.createElement('p')
 
         expect(() => connectListener(lazy, element)).toThrow('connectListenerAsync()')
+        // Its rejection is swallowed: the run would otherwise fail on an unhandled rejection
+        expect(() => connectListener({ connect: () => Promise.reject(new Error('Chunk failed')) }, element)).toThrow(
+            'connectListenerAsync()'
+        )
         await expect(connectListenerAsync(lazy, element)).resolves.toBeTypeOf('function')
         await expect(connectListenerAsync({ connect: async () => undefined }, element)).rejects.toThrow(
             'returned no cleanup'

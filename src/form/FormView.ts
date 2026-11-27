@@ -88,7 +88,7 @@ export class FormView<S = AnyShape> {
     }
 
     get name(): string {
-        return this.path.split('.').pop() ?? ''
+        return this.path.slice(this.path.lastIndexOf('.') + 1)
     }
 
     get root(): FormView {
@@ -248,7 +248,7 @@ export class FormView<S = AnyShape> {
     #segmentOf(control: Element): string {
         const prefix = this.fullName ? `${this.fullName}[` : ''
 
-        return (control.getAttribute('name') ?? '').slice(prefix.length).split(/[[\]]/)[0]
+        return (control.getAttribute('name') as string).slice(prefix.length).split(/[[\]]/)[0]
     }
 
     #controlsNamed(name: string, scope: ParentNode): FormControl[] {
@@ -297,7 +297,7 @@ function containerName(container: Element): string {
 
     if (container.id) {
         for (const control of container.querySelectorAll(`[id^="${container.id}_"][name]`)) {
-            const segments = nameSegments(control.getAttribute('name') ?? '')
+            const segments = nameSegments(control.getAttribute('name') as string)
             const rest = control.id.slice(container.id.length + 1)
             // The id continues the container's with the last segments joined by `_`
             for (let start = segments.length - 1; start > 0; start--) {
