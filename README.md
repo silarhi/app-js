@@ -626,6 +626,11 @@ new App({
 nothing, and a Turbo one locks on `turbo:submit-start` and releases on `turbo:submit-end`. `checkAll()` and
 `passwordToggle()` hide with the app-wide class (`setHiddenClass('d-none')` for Bootstrap).
 
+`webauthn()` shows its failures in English by default: replace any of its `messages` (`unsupported`, `notAllowed`,
+`alreadyRegistered`, `invalidOptions`, `failed(message)`). A form whose `data-webauthn-options` are missing, not JSON,
+or without a `challenge` (or a `user.id` to register), as one of a custom `selector` can be, does not ask the browser:
+it shows `invalidOptions` and goes to `app.reportError()`, so the bug of the page reaches `onError`.
+
 ### Testing
 
 `@silarhi/app-js/testing` brings no test runner of its own: reset its fixtures from yours.
