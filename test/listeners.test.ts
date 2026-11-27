@@ -527,17 +527,43 @@ describe('webauthn', () => {
         expect(form('passkey').textContent).toBe('')
     })
 
-    it('fails on a form of its selector carrying no options', async () => {
+    it('says a form of its selector carrying no options cannot use passkeys, and reports it', async () => {
         const get = stubCredentials(async () => new FakeAssertion())
+        const onError = vi.fn()
         mountFixture(
             '<form id="passkey" data-passkey><input data-webauthn-response><p id="error" data-webauthn-error hidden></p></form>',
-            { listeners: [webauthn({ selector: 'form[data-passkey]' })] }
+            { listeners: [webauthn({ selector: 'form[data-passkey]' })], onError }
         )
 
         submit()
 
-        await vi.waitFor(() => expect(byId('error')?.textContent).toMatch(/^The passkey failed: /))
+        expect(byId('error')?.textContent).toBe('Passkeys are not available on this page.')
+        expect(byId('error')?.hidden).toBe(false)
         expect(get).not.toHaveBeenCalled()
+        expect(onError).toHaveBeenCalledWith(
+            new Error('The data-webauthn-options of the form are missing, not JSON, or without a challenge.'),
+            expect.objectContaining({ type: 'connect', element: form('passkey') })
+        )
+    })
+
+    it.each([
+        ['not JSON', '', '{', 'without a challenge'],
+        ['null', '', 'null', 'without a challenge'],
+        ['without a challenge', '', '{"allowCredentials":[]}', 'without a challenge'],
+        ['to register without a user id', 'register', '{"challenge":"AQID","user":{"name":"jo"}}', 'or a user id'],
+    ])('does not ask the browser with options %s', (_case, action, options, reported) => {
+        const ceremony = stubCredentials(async () => new FakeAssertion())
+        const onError = vi.fn()
+        mountFixture(LOGIN, { listeners: [webauthn({ messages: { invalidOptions: 'Pas ici.' } })], onError })
+        form('passkey').dataset.webauthnAction = action
+        form('passkey').dataset.webauthnOptions = options
+
+        submit()
+
+        expect(byId('error')?.textContent).toBe('Pas ici.')
+        expect(ceremony).not.toHaveBeenCalled()
+        expect(onError).toHaveBeenCalledOnce()
+        expect(onError.mock.calls[0][0].message).toContain(`${reported}.`)
     })
 
     it('says when the browser has no passkeys', () => {

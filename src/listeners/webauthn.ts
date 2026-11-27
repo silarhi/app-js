@@ -17,6 +17,8 @@ export interface WebauthnMessages {
     notAllowed: string
     /** A registration of a passkey the account already has. */
     alreadyRegistered: string
+    /** Options missing, not JSON, or without a challenge (or a user id to register): a bug of the page. */
+    invalidOptions: string
     /** Any other failure, given the browser's message. */
     failed: (message: string) => string
 }
@@ -31,6 +33,7 @@ export const WEBAUTHN_MESSAGES: WebauthnMessages = {
     unsupported: 'Your browser does not support passkeys.',
     notAllowed: 'The passkey was not used: try again.',
     alreadyRegistered: 'This passkey is already registered on your account.',
+    invalidOptions: 'Passkeys are not available on this page.',
     failed: (message) => `The passkey failed: ${message}`,
 }
 
@@ -45,6 +48,8 @@ export const WEBAUTHN_MESSAGES: WebauthnMessages = {
  * - otherwise: a login or its second factor (`navigator.credentials.get()`)
  *
  * A failure is shown in the form's `[data-webauthn-error]` element, unhidden.
+ * Options the ceremony cannot use (no challenge, or no user id to register)
+ * are also reported through `app.reportError()`, and the browser is not asked.
  * Unmounting the form aborts a pending ceremony.
  */
 export function webauthn({
@@ -53,9 +58,9 @@ export function webauthn({
 }: WebauthnOptions = {}): Listener<HTMLFormElement> {
     const text = { ...WEBAUTHN_MESSAGES, ...messages }
 
-    return {
+    const listener: Listener<HTMLFormElement> = {
         selector,
-        connect(form) {
+        connect(form, { app }) {
             const errorElement = form.querySelector<HTMLElement>('[data-webauthn-error]')
             const showError = (message: string) => {
                 if (errorElement) {
@@ -78,18 +83,29 @@ export function webauthn({
                     return
                 }
 
+                const register = form.dataset.webauthnAction === 'register'
+                const options = readOptions(form.dataset.webauthnOptions, register)
+                if (!options) {
+                    showError(text.invalidOptions)
+                    app.reportError(
+                        new Error(
+                            `The data-webauthn-options of the form are missing, not JSON, or without a challenge${register ? ' or a user id' : ''}.`
+                        ),
+                        { type: 'connect', listener, element: form }
+                    )
+                    return
+                }
+
                 try {
-                    const options = JSON.parse(form.dataset.webauthnOptions ?? '{}')
-                    const credential =
-                        form.dataset.webauthnAction === 'register'
-                            ? await navigator.credentials.create({
-                                  publicKey: decodeCreationOptions(options),
-                                  signal: controller.signal,
-                              })
-                            : await navigator.credentials.get({
-                                  publicKey: decodeRequestOptions(options),
-                                  signal: controller.signal,
-                              })
+                    const credential = register
+                        ? await navigator.credentials.create({
+                              publicKey: decodeCreationOptions(options as CreationOptionsJson),
+                              signal: controller.signal,
+                          })
+                        : await navigator.credentials.get({
+                              publicKey: decodeRequestOptions(options as RequestOptionsJson),
+                              signal: controller.signal,
+                          })
 
                     const field = form.querySelector<HTMLInputElement>('[data-webauthn-response]')
                     if (!(credential instanceof PublicKeyCredential) || !field) {
@@ -124,6 +140,8 @@ export function webauthn({
             }
         },
     }
+
+    return listener
 }
 
 /** A credential descriptor as the server sends it: its id in base64url */
@@ -140,6 +158,23 @@ type CreationOptionsJson = Omit<PublicKeyCredentialCreationOptions, 'challenge' 
 type RequestOptionsJson = Omit<PublicKeyCredentialRequestOptions, 'challenge' | 'allowCredentials'> & {
     challenge: string
     allowCredentials?: CredentialDescriptorJson[]
+}
+
+/**
+ * The options of `data-webauthn-options`, or `null` when the ceremony cannot
+ * use them: missing, not JSON, without a challenge, or without a user id to register.
+ */
+function readOptions(json: string | undefined, register: boolean): CreationOptionsJson | RequestOptionsJson | null {
+    let options: { challenge?: unknown; user?: { id?: unknown } } | null
+    try {
+        options = JSON.parse(json ?? '')
+    } catch {
+        return null
+    }
+
+    return typeof options?.challenge === 'string' && (!register || typeof options.user?.id === 'string')
+        ? (options as CreationOptionsJson | RequestOptionsJson)
+        : null
 }
 
 // WebAuthn sends every binary value in base64url (RFC 4648 §5); the browser API wants and returns ArrayBuffers
