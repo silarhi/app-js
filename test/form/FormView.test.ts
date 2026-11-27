@@ -66,6 +66,13 @@ describe('navigation', () => {
         )
     })
 
+    it('names an unnamed form, or a container by its id, in the error', () => {
+        document.body.innerHTML = '<form><input id="city" name="city"></form><div id="panel"></div>'
+
+        expect(() => formView(document.forms[0]).get('zip')).toThrow('No field "zip" in "form".')
+        expect(() => FormView.fromElement($('#panel')).get('zip')).toThrow('No field "zip" in "panel".')
+    })
+
     it('throws a FieldNotFoundError carrying the path and suggestions', () => {
         let error: unknown
         try {
@@ -96,6 +103,13 @@ describe('navigation', () => {
         expect(form.get('phones').children.map((child) => child.name)).toEqual(['0', '2'])
         expect(form.get('size').children.map((child) => child.id)).toEqual(['user_size_0', 'user_size_1'])
         expect(form.get('notes').children).toEqual([])
+        expect(form.get('tags').children.map((child) => child.id)).toEqual([
+            'user_tags_0',
+            'user_tags_1',
+            'user_tags_2',
+        ])
+        expect(form.get('roles').children).toEqual([])
+        expect(form.get('name').children).toEqual([])
     })
 
     it('tells which child an element belongs to, from the names inside it', () => {
@@ -166,6 +180,17 @@ describe('navigation', () => {
         expect(part.field('amount').value).toBe('12')
         expect(part.field('taxType').value).toBe('tax_included')
         expect(part.field('customTaxAmount').value).toBe(false)
+    })
+
+    it('reads the shared name past the buttons, down to none for top-level fields', () => {
+        document.body.innerHTML =
+            '<div class="row"><button name="save">Save</button><input name="user[name]"><input name="user[city]"></div>' +
+            '<div class="search"><input id="q" name="q" value="paris"></div>'
+        const search = formView($('.search'))
+
+        expect(formView($('.row')).fullName).toBe('user')
+        expect(search.fullName).toBe('')
+        expect(search.field('q').value).toBe('paris')
     })
 
     it('scopes lookups to the element it roots on', () => {

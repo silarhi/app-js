@@ -29,7 +29,7 @@ export function hasFieldChanged(field: Element): boolean {
 
     if (field instanceof HTMLInputElement && field.type === 'file') {
         // Its `value` stays empty until a file is chosen, whatever the server rendered in the attribute
-        return (field.files?.length ?? 0) > 0
+        return (field.files as FileList).length > 0
     }
 
     if (field instanceof HTMLSelectElement) {

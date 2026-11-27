@@ -258,6 +258,20 @@ describe('remove', () => {
         expect(removed).toHaveBeenCalledWith({ collection: $('#tasks'), item, index: 0 })
     })
 
+    it('reports an item without fields by its position', async () => {
+        $('#tasks').insertAdjacentHTML(
+            'beforeend',
+            '<div class="collection-item"><p>Empty</p><button class="remove-collection"></button></div>'
+        )
+        const removed = vi.fn()
+        $('#tasks').addEventListener(COLLECTION_EVENTS.removed, (event) => removed(event.detail.index))
+        const collections = manager()
+
+        await collections.remove(input(collections.items('tasks')[1], 'button'), { confirm: false })
+
+        expect(removed).toHaveBeenCalledWith(1)
+    })
+
     it('lets a collection.remove handler veto the removal before any dialog', async () => {
         const confirm = vi.fn(() => true)
         const collections = manager({ confirm })

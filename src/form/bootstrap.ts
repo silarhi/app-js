@@ -75,8 +75,9 @@ export function bootstrapTheme({
             if (element && !isControl(element)) {
                 // A container: the options of an expanded choice, an embedded form
                 element.append(...feedbacks)
-            } else if (control) {
-                placeAfter(control, feedbacks)
+            } else {
+                // A control, or the last input of a field without element: the guard above ensures one
+                placeAfter(control as FormControl, feedbacks)
             }
 
             // Only the classes added here are removed: a control the server rendered invalid stays so

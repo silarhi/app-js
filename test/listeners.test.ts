@@ -105,6 +105,28 @@ describe('submitOnce', () => {
         expect(form('order').hasAttribute('aria-busy')).toBe(false)
     })
 
+    it('locks once for repeated Turbo starts, so the end releases every button', () => {
+        mountFixture(PAGE, { listeners: [submitOnce()] })
+
+        form('order').dispatchEvent(new Event('turbo:submit-start'))
+        form('order').dispatchEvent(new Event('turbo:submit-start'))
+        form('order').dispatchEvent(new Event('turbo:submit-end'))
+
+        expect(button('send').disabled).toBe(false)
+        expect(button('outside').disabled).toBe(false)
+    })
+
+    it('disables submit inputs and leaves the other inputs alone', () => {
+        mountFixture('<form id="order" data-submit-once><input id="q" name="q"><input id="go" type="submit"></form>', {
+            listeners: [submitOnce()],
+        })
+
+        submit()
+
+        expect(input('go').disabled).toBe(true)
+        expect(input('q').disabled).toBe(false)
+    })
+
     it('releases the buttons when the page comes back from the cache, or the form is unmounted', () => {
         const app = mountFixture(PAGE, { listeners: [submitOnce()] })
 
@@ -158,6 +180,19 @@ describe('checkAll', () => {
         change(input('c'), false)
 
         expect(input('all').indeterminate).toBe(true)
+    })
+
+    it('ignores the changes of the other fields of the container', () => {
+        mountFixture(PAGE.replace('<form', '<select id="sort"></select><input type="checkbox" id="other"><form'), {
+            listeners: [checkAll()],
+        })
+        input('a').checked = true
+
+        byId('sort')?.dispatchEvent(new Event('change', { bubbles: true }))
+        change(input('other'), true)
+
+        expect(form('delete').classList.contains('hidden')).toBe(true)
+        expect(input('all').indeterminate).toBe(false)
     })
 
     it('takes the selectors it is given', () => {
@@ -221,6 +256,34 @@ describe('passwordToggle', () => {
         expect(input('password').type).toBe('text')
     })
 
+    it('toggles a field outside any form, leaving a button without title untitled', () => {
+        mountFixture(
+            '<input id="password" type="password">' +
+                '<button type="button" id="eye" data-password-toggle aria-controls="password" data-password-toggle-label-hide="Hide"></button>',
+            { listeners: [passwordToggle()] }
+        )
+
+        button('eye').click()
+
+        expect(input('password').type).toBe('text')
+        expect(button('eye').getAttribute('aria-label')).toBe('Hide')
+        expect(button('eye').hasAttribute('title')).toBe(false)
+    })
+
+    it('connects nothing to a button without a field', () => {
+        mountFixture(
+            '<button type="button" id="eye" data-password-toggle></button>' +
+                '<button type="button" id="ghost" data-password-toggle aria-controls="missing"></button>',
+            { listeners: [passwordToggle()] }
+        )
+
+        button('eye').click()
+        button('ghost').click()
+
+        expect(button('eye').hasAttribute('aria-pressed')).toBe(false)
+        expect(button('ghost').hasAttribute('aria-pressed')).toBe(false)
+    })
+
     it('still reads the former label attributes, with a deprecation warning', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
         mountFixture(PAGE.replaceAll('data-password-toggle-label-', 'data-label-'), { listeners: [passwordToggle()] })
@@ -271,6 +334,34 @@ describe('copyToClipboard', () => {
 
         await vi.waitFor(() => expect(failed).toHaveBeenCalledWith(expect.any(TypeError)))
     })
+
+    it('logs the failure by default', async () => {
+        const refused = new DOMException('Denied', 'NotAllowedError')
+        stubClipboard(async () => {
+            throw refused
+        })
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+        mountFixture('<button id="link" data-copy="x"></button>', { listeners: [copyToClipboard()] })
+
+        button('link').click()
+
+        await vi.waitFor(() => expect(error).toHaveBeenCalledWith('Failed to copy to the clipboard', refused))
+    })
+
+    it('copies an empty text for a target that is not given or not found', async () => {
+        const writeText = vi.fn(async (_text: string) => undefined)
+        stubClipboard(writeText)
+        mountFixture(
+            '<button id="none" data-copy-target=""></button><button id="missing" data-copy-target="#missing"></button>',
+            { listeners: [copyToClipboard()] }
+        )
+
+        button('none').click()
+        button('missing').click()
+
+        await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(2))
+        expect(writeText.mock.calls).toEqual([[''], ['']])
+    })
 })
 
 describe('webauthn', () => {
@@ -290,6 +381,8 @@ describe('webauthn', () => {
     }
 
     const submit = () => form('passkey').dispatchEvent(new Event('submit', { cancelable: true }))
+    /** Lets a ceremony that settles at once run to its end */
+    const settle = () => new Promise((resolve) => setTimeout(resolve))
 
     it('registers a passkey and submits its answer', async () => {
         const create = vi.fn(async (_options: CredentialCreationOptions) => new FakeCredential())
@@ -324,6 +417,127 @@ describe('webauthn', () => {
 
         await vi.waitFor(() => expect(byId('error')?.textContent).toBe('Réessayez.'))
         expect(byId('error')?.hidden).toBe(false)
+    })
+
+    class FakeAssertion {
+        id = 'cred'
+        type = 'public-key'
+        rawId = new Uint8Array([1]).buffer
+        response = {
+            clientDataJSON: new Uint8Array([1]).buffer,
+            authenticatorData: new Uint8Array([2]).buffer,
+            signature: new Uint8Array([3]).buffer,
+            userHandle: null,
+        }
+    }
+
+    const LOGIN =
+        '<form id="passkey" data-webauthn-options=\'{"challenge":"AQID","allowCredentials":[{"id":"BAU","type":"public-key"}]}\'>' +
+        '<input id="response" type="hidden" data-webauthn-response><p id="error" data-webauthn-error hidden></p></form>'
+
+    /** Stubs a browser whose ceremonies settle as `ceremony` says */
+    const stubCredentials = (ceremony: () => Promise<unknown>) => {
+        const fn = vi.fn(async (_options: CredentialRequestOptions | CredentialCreationOptions) => ceremony())
+        vi.stubGlobal('PublicKeyCredential', FakeAssertion)
+        vi.stubGlobal('navigator', { ...navigator, credentials: { create: fn, get: fn } })
+
+        return fn
+    }
+
+    it('logs in with a passkey and submits its answer', async () => {
+        const get = stubCredentials(async () => new FakeAssertion())
+        mountFixture(LOGIN, { listeners: [webauthn()] })
+        const sent = vi.spyOn(form('passkey'), 'submit').mockImplementation(() => undefined)
+
+        submit()
+        await vi.waitFor(() => expect(sent).toHaveBeenCalledOnce())
+
+        const publicKey = get.mock.calls[0][0].publicKey as PublicKeyCredentialRequestOptions
+        expect([...new Uint8Array(publicKey.challenge as ArrayBuffer)]).toEqual([1, 2, 3])
+        expect(
+            publicKey.allowCredentials?.map(({ id, type }) => [[...new Uint8Array(id as ArrayBuffer)], type])
+        ).toEqual([[[4, 5], 'public-key']])
+        expect(JSON.parse(input('response').value)).toEqual({
+            id: 'cred',
+            type: 'public-key',
+            rawId: 'AQ',
+            response: { clientDataJSON: 'AQ', authenticatorData: 'Ag', signature: 'Aw' },
+        })
+    })
+
+    it('submits nothing without a credential, or without a field for it', async () => {
+        const get = stubCredentials(async () => null)
+        mountFixture(LOGIN, { listeners: [webauthn()] })
+        const sent = vi.spyOn(form('passkey'), 'submit').mockImplementation(() => undefined)
+
+        submit()
+        await settle()
+        input('response').remove()
+        get.mockImplementation(async () => new FakeAssertion())
+        submit()
+        await settle()
+
+        expect(get).toHaveBeenCalledTimes(2)
+        expect(sent).not.toHaveBeenCalled()
+    })
+
+    it.each([
+        [
+            'an already registered passkey',
+            new DOMException('Exists', 'InvalidStateError'),
+            'This passkey is already registered on your account.',
+        ],
+        ['any other error', new TypeError('Bad options'), 'The passkey failed: Bad options'],
+        ['a thrown string', 'Broken', 'The passkey failed: Broken'],
+    ])('shows why it failed on %s', async (_case, failure, message) => {
+        stubCredentials(async () => {
+            throw failure
+        })
+        mountFixture(PAGE, { listeners: [webauthn()] })
+
+        submit()
+
+        await vi.waitFor(() => expect(byId('error')?.textContent).toBe(message))
+    })
+
+    it('shows nothing for an aborted ceremony', async () => {
+        stubCredentials(async () => {
+            throw new DOMException('Aborted', 'AbortError')
+        })
+        mountFixture(PAGE, { listeners: [webauthn()] })
+
+        submit()
+        await settle()
+
+        expect(byId('error')?.hidden).toBe(true)
+        expect(byId('error')?.textContent).toBe('')
+    })
+
+    it('fails quietly in a form without an error element', async () => {
+        stubCredentials(async () => {
+            throw new DOMException('Cancelled', 'NotAllowedError')
+        })
+        mountFixture(PAGE.replace(/<p[^>]+><\/p>/, ''), { listeners: [webauthn()] })
+        const sent = vi.spyOn(form('passkey'), 'submit').mockImplementation(() => undefined)
+
+        submit()
+        await settle()
+
+        expect(sent).not.toHaveBeenCalled()
+        expect(form('passkey').textContent).toBe('')
+    })
+
+    it('fails on a form of its selector carrying no options', async () => {
+        const get = stubCredentials(async () => new FakeAssertion())
+        mountFixture(
+            '<form id="passkey" data-passkey><input data-webauthn-response><p id="error" data-webauthn-error hidden></p></form>',
+            { listeners: [webauthn({ selector: 'form[data-passkey]' })] }
+        )
+
+        submit()
+
+        await vi.waitFor(() => expect(byId('error')?.textContent).toMatch(/^The passkey failed: /))
+        expect(get).not.toHaveBeenCalled()
     })
 
     it('says when the browser has no passkeys', () => {

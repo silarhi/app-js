@@ -556,6 +556,56 @@ describe('FormDefinition', () => {
         expect(definition.resolve(form.get('first'))).toBe(form.field('first'))
     })
 
+    it('never requires a radio group without wrapper inside a hidden block', () => {
+        document.body.insertAdjacentHTML(
+            'beforeend',
+            `<div id="panel">
+                <div class="form-group">
+                    <input id="f_size_0" name="f[size]" type="radio" value="s">
+                    <input id="f_size_1" name="f[size]" type="radio" value="m">
+                </div>
+                <div class="form-group"><input id="f_first" name="f[first]"></div>
+            </div>`
+        )
+        const definition = new FormDefinition({ form: formView('f') })
+        definition
+            .when('vat')
+            .isChecked()
+            .show(block($('#panel')))
+        definition.when('name').equals('x').require('size')
+        definition.apply()
+
+        type('f_name', 'x')
+        expect($('#f_size_0').required).toBe(false)
+
+        check('f_vat')
+        expect($('#f_size_0').required).toBe(true)
+    })
+
+    it('reads the fields of a panel outside the scope of its form by their elements', () => {
+        document.body.innerHTML = `
+            <form name="f"><div class="form-group"><input id="f_vat" name="f[vat]" type="checkbox"></div></form>
+            <div id="panel">
+                <div class="form-group"><input id="f_first" name="f[first]" required></div>
+                <div class="form-group"><input id="f_birth" name="f[birth]"></div>
+            </div>`
+        const form = formView(document.forms[0])
+        const definition = new FormDefinition({ form })
+        definition
+            .when('vat')
+            .isChecked()
+            .show(block($('#panel')))
+        const field = vi.spyOn(form, 'field')
+        definition.apply()
+
+        expect(field).not.toHaveBeenCalledWith('first')
+        expect($('#f_first').required).toBe(false)
+
+        check('f_vat')
+
+        expect($('#f_first').required).toBe(true)
+    })
+
     it('refuses to require a block holding several fields', () => {
         document.body.insertAdjacentHTML(
             'beforeend',
@@ -683,6 +733,21 @@ describe('FormDefinition', () => {
         definition.when('vat').isChecked().show(block('ghost'))
 
         expect(() => definition.apply()).toThrow('The block "ghost" has no element.')
+    })
+
+    it('refuses a block of a node without an element', () => {
+        document.body.insertAdjacentHTML(
+            'beforeend',
+            '<input id="f_size_0" name="f[size]" type="radio"><input id="f_size_1" name="f[size]" type="radio">'
+        )
+        const form = formView('f')
+        const definition = new FormDefinition({ form })
+        definition
+            .when('vat')
+            .isChecked()
+            .show(block(form.get('size')))
+
+        expect(() => definition.apply()).toThrow('The block has no element.')
     })
 
     it('looks ids up inside its root only', () => {

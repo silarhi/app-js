@@ -188,11 +188,7 @@ export class App {
      */
     unmount(container: ParentNode = document): void {
         for (const listener of this.#allListeners()) {
-            const tracked = this.#tracked.get(listener)
-            if (!tracked) {
-                continue
-            }
-
+            const tracked = this.#trackedOf(listener)
             for (const element of tracked) {
                 if (element.isConnected && element !== container && !container.contains(element)) {
                     continue
@@ -352,12 +348,13 @@ export class App {
         return [...this.#listeners, pagesListener as Listener]
     }
 
-    #connect(listener: Listener, container: ParentNode): void {
-        const tracked = this.#tracked.get(listener)
-        if (!tracked) {
-            return
-        }
+    /** The elements a listener connected: every registered listener has a set, never removed. */
+    #trackedOf(listener: Listener): Set<Element> {
+        return this.#tracked.get(listener) as Set<Element>
+    }
 
+    #connect(listener: Listener, container: ParentNode): void {
+        const tracked = this.#trackedOf(listener)
         for (const element of findAllSelf(listener.selector, container)) {
             if (tracked.has(element)) {
                 continue
